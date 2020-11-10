@@ -1,3 +1,0 @@
-behave
-cassandra-driver==3.24.0
-ccm==3.1.5
