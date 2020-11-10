@@ -1,0 +1,196 @@
+# Copyright 2020 DataStax, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Java Maven CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-java/ for more details
+#
+version: 2.1
+jobs:
+  repair-tests:
+    parameters:
+       repair-type:
+         type: string
+    environment:
+      REPAIR_TYPE: << parameters.repair-type >>
+    machine:
+      image: ubuntu-2004:202010-01
+    steps:
+      - add_ssh_keys:
+          fingerprints:
+            - "b0:ff:4b:65:3e:e5:df:69:4f:fb:24:9b:d3:18:38:9a"
+      - checkout
+      - run:
+          name: Install System Dependencies
+          command: |
+            sudo apt-get update
+            sudo apt-get install openjdk-8-jre openjdk-8-jdk -y
+            sudo dpkg -i "./dependencies/tlp-cluster_0.7~SNAPSHOT_all.deb"
+            mkdir -p ~/.tlp-cluster/profiles/default
+            sudo apt-get install ant -y
+            # No clue why we need to pull these manually now...
+            docker pull hashicorp/terraform:0.11.14
+            docker pull thelastpickle/pssh:1.0
+            docker pull thelastpickle/cassandra-build:1.0
+            curl -sL https://github.com/shyiko/jabba/raw/master/install.sh | bash && . ~/.jabba/jabba.sh
+            . ~/.jabba/jabba.sh && jabba install adopt@1.8.0-272
+            . ~/.jabba/jabba.sh && jabba alias default adopt@1.8.0-272
+            . ~/.jabba/jabba.sh && sudo update-alternatives --install /usr/bin/java java ${JAVA_HOME%*/}/bin/java 20000
+            . ~/.jabba/jabba.sh && sudo update-alternatives --install /usr/bin/javac javac ${JAVA_HOME%*/}/bin/javac 20000
+            # Compress the repair tests code to be uploaded later
+            tar czf cassandra-rtest.tar.gz *
+            mkdir -p ~/target/test-results/artifacts
+
+      - run: 
+          name: Build Cassandra Trunk
+          command: |
+            echo "Building trunk..."
+            git clone https://github.com/apache/cassandra.git
+            tlp-cluster build -n latest_trunk ./cassandra
+            ls -lrt ~/.tlp-cluster/builds/latest_trunk
+            ls -lrt ~/.tlp-cluster/builds/latest_trunk/conf
+            ls -lrt ~/.tlp-cluster/builds/latest_trunk/deb
+
+      - run:
+          name: Configure tlp-cluster
+          command: |
+            set -e
+            if [[ -n "${TLP_CLUSTER_KEY}" ]];
+            then
+              printf "%s" "$(echo ${TLP_CLUSTER_SETTINGS} | base64 --decode)" > ~/.tlp-cluster/profiles/default/settings.yaml
+              printf "%s" "$(echo ${TLP_CLUSTER_KEY} | base64 --decode)" > ~/.tlp-cluster/profiles/default/secret.pem
+            fi
+            chmod 600 ~/.tlp-cluster/profiles/default/secret.pem
+
+      - run: 
+          name: Spin up cluster
+          command: |
+            echo "Initializing AWS cluster..."
+            timeout --foreground 120 tlp-cluster init CASS CASSANDRA-15580 "4.0 repair quality testing" -c 3 --instance m5ad.xlarge > init.log 2>&1
+            echo "Spinning up EC2 instances..."
+            timeout --foreground 120 tlp-cluster up --auto-approve > up.log 2>&1
+            echo "Using built trunk..."
+            timeout --foreground 180 tlp-cluster use latest_trunk --config "cluster_name:repair_quality,num_tokens:256,concurrent_compactors:4" > use.log 2>&1 || cat use.log
+            # Allow external JMX access
+            sed -i '1s/^/LOCAL_JMX=no\n/' provisioning/cassandra/conf/cassandra-env.sh
+            sed -i 's/com.sun.management.jmxremote.authenticate=true/com.sun.management.jmxremote.authenticate=false/' provisioning/cassandra/conf/cassandra-env.sh
+            # Set heap size to 8G/3G
+            echo "-Xms8G" >> provisioning/cassandra/conf/jvm8-server.options
+            echo "-Xmx8G" >> provisioning/cassandra/conf/jvm8-server.options
+            echo "-Xmn3G" >> provisioning/cassandra/conf/jvm8-server.options
+            echo "Installing packages..."
+            timeout --foreground 600 tlp-cluster install > install.log 2>&1 || echo "meh... install phase seem to have failed"
+            echo "Starting Cassandra..."
+            timeout --foreground 600 tlp-cluster start > start.log 2>&1 || echo "meh... start phase seem to have failed"
+      
+      - run: 
+          name: Install and configure Medusa
+          no_output_timeout: 20m
+          command: |
+            mkdir -p ~/.aws
+            echo "$(echo ${AWS_CREDENTIALS} | base64 --decode)" >> ~/.aws/credentials
+            chmod 600 ~/.aws/credentials
+            install_medusa.sh -b cassandra-repair-qa -c ~/.aws/credentials -s s3_us_west_oregon --prefix=cassandra-qa --branch=alex/unthrottle_restores > install_medusa.log
+
+      - run: 
+          name: Prepare the test environment
+          command: |
+            set -e
+            shopt -s expand_aliases || setopt aliases
+            source env.sh
+            # Push the rtest on the monitoring node to run them from there
+            scp cassandra-rtest.tar.gz monitoring0:/home/ubuntu
+            ssh monitoring0 "mkdir -p /home/ubuntu/.tlp-cluster/profiles/default/"
+            scp ~/.tlp-cluster/profiles/default/secret.pem monitoring0:/home/ubuntu/.tlp-cluster/profiles/default/secret.pem
+            RUN_TEST_SUITE=$(cat \<< EOF
+            set -x
+            sudo apt-get install jq -y
+            curl -sL https://github.com/shyiko/jabba/raw/master/install.sh | bash && . ~/.jabba/jabba.sh
+            . ~/.jabba/jabba.sh && jabba install adopt@1.8.0-272
+            . ~/.jabba/jabba.sh && jabba alias default adopt@1.8.0-272
+            . ~/.jabba/jabba.sh && sudo update-alternatives --install /usr/bin/java java ${JAVA_HOME%*/}/bin/java 20000
+            . ~/.jabba/jabba.sh && sudo update-alternatives --install /usr/bin/javac javac ${JAVA_HOME%*/}/bin/javac 20000
+            sudo apt-get install maven -y
+            i=0
+            for ip in \$(cat provisioning/monitoring/config/prometheus/tg_mcac.json | jq -r '.[]?.targets[0]'|cut -d':' -f1); do export CLUSTER_CONTACT_POINT\$i=\$ip; ((i=i+1)); done
+            tar xvf /home/ubuntu/cassandra-rtest.tar.gz
+            set -e
+            CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@\$1"
+            EOF
+            )
+            echo "$RUN_TEST_SUITE" > run_test_suite.sh
+            scp run_test_suite.sh monitoring0:/home/ubuntu
+            ssh monitoring0 "chmod u+x /home/ubuntu/run_test_suite.sh"
+    
+      - run: 
+          name: Run repair tests
+          no_output_timeout: 180m
+          command: |
+            set -e
+            shopt -s expand_aliases || setopt aliases
+            source env.sh
+            ssh monitoring0 "./run_test_suite.sh $REPAIR_TYPE"
+
+      - run:
+          name: Retrieve test results and logs
+          when: always
+          command: |
+            shopt -s expand_aliases || setopt aliases
+            set +e 
+            source env.sh            
+            for i in {0..2}
+            do
+              ssh cassandra$i "tar czf /home/ubuntu/cassandra${i}_logs.tar.gz /var/log/cassandra/*"
+              scp cassandra$i:/home/ubuntu/cassandra${i}_logs.tar.gz ~/target/test-results/artifacts/
+              scp cassandra$i:/home/ubuntu/medusa_restore.log ~/target/test-results/artifacts/cassandra${i}_medusa_restore.log || true
+            done
+            scp monitoring0:/home/ubuntu/target/surefire-reports/junit.xml ~/target/test-results || true
+            scp monitoring0:/home/ubuntu/target/surefire-reports/cucumber-report.html ~/target/test-results/artifacts || true
+            
+
+      - store_test_results:
+          path: ~/target/test-results
+
+      - store_artifacts:
+          path: ~/target/test-results/artifacts 
+
+      - run:
+          name: Tear down cluster
+          when: always
+          command: |
+            echo "Terminating instances, please be patient..."
+            timeout --foreground 600 tlp-cluster down --auto-approve > down.log 2>&1
+            tail -10 down.log
+
+workflows:
+  version: 2.1
+  repair_qa_push:
+    jobs:
+      - repair-tests:
+          matrix:
+            parameters:
+              repair-type: ["Full", "Subrange", "Incremental"]
+  repair_qa_nightly:
+    triggers:
+      - schedule:
+          cron: "0 0 * * *"
+          filters:
+            branches:
+              only:
+                - trunk
+    jobs:
+      - repair-tests:
+          matrix:
+            parameters:
+              repair-type: ["Full", "Subrange", "Incremental"]
