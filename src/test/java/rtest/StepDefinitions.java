@@ -43,8 +43,12 @@ public class StepDefinitions {
 
   @After
   public void cleanUp() {
-    cluster.shutDown();
-    miniReaper.shutdown();
+    if (cluster != null) {
+      cluster.shutDown();
+    }
+    if (miniReaper != null) {
+      miniReaper.shutdown();
+    }
   }
 
   private void initCcmCluster() {
@@ -53,7 +57,7 @@ public class StepDefinitions {
   }
 
   private void initAwsCluster() {
-    cluster = new AwsRtestCluster(this.contactPoint, 9042);
+    cluster = new AwsRtestCluster(this.contactPoint, 9160);
     miniReaper = new MiniReaper(cluster, Maps.newHashMap());
   }
 

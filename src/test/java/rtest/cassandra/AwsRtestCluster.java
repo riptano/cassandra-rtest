@@ -19,7 +19,6 @@ public class AwsRtestCluster extends RtestCluster {
 
   public AwsRtestCluster(String host, int port) {
     super(host, port);
-
     try {
       jsch.addIdentity(SSH_KEY_PATH);
     } catch (JSchException e) {

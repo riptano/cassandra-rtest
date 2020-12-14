@@ -11,8 +11,8 @@ public class CcmRtestCluster extends RtestCluster {
 
   private final String clusterName;
 
-  public CcmRtestCluster(String contactHost, int contactPort) {
-    super(contactHost, contactPort);
+  public CcmRtestCluster(String contactHost, int port) {
+    super(contactHost, port);
     clusterName = runCmd("cat ~/.ccm/CURRENT").get(0);
   }
 

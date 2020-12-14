@@ -13,6 +13,13 @@ jobs:
     - uses: webfactory/ssh-agent@v0.4.1
       with:
           ssh-private-key: ${{ secrets.TLP_CLUSTER_KEY }}
+    - name: Cache local Maven repository
+      uses: actions/cache@v2
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
     - name: Install dependencies
       shell: bash
       run: |
@@ -78,7 +85,7 @@ jobs:
       run: |
         shopt -s expand_aliases || setopt aliases
         source env.sh
-        env
+        c0 cqlsh -e "DESCRIBE KEYSPACE system"
         CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@DryRun"
 
 #    - name: Run test scenarios
