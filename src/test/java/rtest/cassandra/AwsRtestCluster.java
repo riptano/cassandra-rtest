@@ -11,7 +11,10 @@ import static java.util.stream.Collectors.toMap;
 public class AwsRtestCluster extends RtestCluster {
 
   private static final String SSH_KEY_PATH = "/home/runner/.tlp-cluster/profiles/default/secret.pem";
-  private final String sshUser = System.getProperty("user.name");
+
+  // in GHA the user is 'runner', but for ssh we need the one from tlp-cluster, which is 'ubuntu'
+  private static final String sshUser = "ubuntu";
+
   private final JSch jsch = new JSch();
   private final UserInfo jschUserInfo = new AuthKeyUserInfo();
 
@@ -44,7 +47,7 @@ public class AwsRtestCluster extends RtestCluster {
       return session;
     } catch (JSchException e) {
       throw new RuntimeException(String.format(
-          "Could not open SSH session with %s", host
+          "Could not open SSH session with %s: %s", host, e.getMessage()
       ));
     }
   }

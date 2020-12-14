@@ -57,7 +57,7 @@ public class StepDefinitions {
   }
 
   private void initAwsCluster() {
-    cluster = new AwsRtestCluster(this.contactPoint, 9160);
+    cluster = new AwsRtestCluster(this.contactPoint, 9042);
     miniReaper = new MiniReaper(cluster, Maps.newHashMap());
   }
 
