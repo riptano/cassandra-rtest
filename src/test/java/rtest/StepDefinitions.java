@@ -68,12 +68,12 @@ public class StepDefinitions {
 
   private void initCcmCluster() {
     cluster = new CcmRtestCluster(this.contactPoints, 9042);
-    miniReaper = new MiniReaper(cluster, ImmutableMap.of("127.0.0.1", 7100, "127.0.0.2", 7200, "127.0.0.3", 7300));
+    miniReaper = new MiniReaper(this.contactPoints, ImmutableMap.of("127.0.0.1", 7100, "127.0.0.2", 7200, "127.0.0.3", 7300));
   }
 
   private void initAwsCluster() {
     cluster = new AwsRtestCluster(this.contactPoints, 9042);
-    miniReaper = new MiniReaper(cluster, Maps.newHashMap());
+    miniReaper = new MiniReaper(this.contactPoints, Maps.newHashMap());
   }
 
   @Given("a cluster is running and reachable")

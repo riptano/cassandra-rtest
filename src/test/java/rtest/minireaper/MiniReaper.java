@@ -26,17 +26,16 @@ public class MiniReaper implements NotificationListener {
 
   private int latestRepairCommandId = -1;
 
-  public MiniReaper(RtestCluster cluster, Map<String, Integer> jmxPorts) {
-    this.jmxConnections = connect(cluster, jmxPorts);
+  public MiniReaper(List<String> contactPoints, Map<String, Integer> jmxPorts) {
+    this.jmxConnections = connect(contactPoints, jmxPorts);
     this.isUp = true;
   }
 
-  private Map<String, JmxProxy> connect(RtestCluster cluster, Map<String, Integer> jmxPorts) {
-    List<String> hosts = cluster.getContactPoints();
-    return hosts.stream().map(hostName -> {
-      int jmxPort = jmxPorts.getOrDefault(hostName, 7199);
-      JmxProxy jmxProxy = JmxProxy.connect(hostName, jmxPort);
-      return Pair.of(hostName, jmxProxy);
+  private Map<String, JmxProxy> connect(List<String> contactPoints, Map<String, Integer> jmxPorts) {
+    return contactPoints.stream().map(contactPoint -> {
+      int jmxPort = jmxPorts.getOrDefault(contactPoint, 7199);
+      JmxProxy jmxProxy = JmxProxy.connect(contactPoint, jmxPort);
+      return Pair.of(contactPoint, jmxProxy);
     }).collect(toMap(Pair::getLeft, Pair::getRight));
   }
 

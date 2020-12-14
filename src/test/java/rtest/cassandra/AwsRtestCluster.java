@@ -21,8 +21,8 @@ public class AwsRtestCluster extends RtestCluster {
 
   private final Map<String, Session> sshSessions;
 
-  public AwsRtestCluster(List<String> hosts, int port) {
-    super(hosts, port);
+  public AwsRtestCluster(List<String> contactHosts, int port) {
+    super(contactHosts, port);
     try {
       jsch.addIdentity(SSH_KEY_PATH);
     } catch (JSchException e) {
@@ -35,7 +35,7 @@ public class AwsRtestCluster extends RtestCluster {
       throw new RuntimeException("Could not set KnownHosts file", e);
     }
 
-    this.sshSessions = openSessions(hosts);
+    this.sshSessions = openSessions(contactHosts);
   }
 
   private Map<String, Session> openSessions(List<String> hosts) {
