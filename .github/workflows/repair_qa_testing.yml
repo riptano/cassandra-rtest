@@ -72,13 +72,22 @@ jobs:
           timeout --foreground 600 tlp-cluster install > install.log 2>&1 || echo "meh... install phase seem to have failed" > /dev/null 2>&1
           echo "Starting Cassandra..."
           timeout --foreground 600 tlp-cluster start > start.log 2>&1 || echo "meh... start phase seem to have failed" > /dev/null 2>&1
- 
-    - name: Run test scenarios
+
+    - name: Check if test scenarios can run
       if: ${{ success() }}
       run: |
-          shopt -s expand_aliases || setopt aliases
-          source env.sh
-          mvn test
+        shopt -s expand_aliases || setopt aliases
+        source env.sh
+        env
+        CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@DryRun"
+
+#    - name: Run test scenarios
+#      if: ${{ success() }}
+#      run: |
+#          shopt -s expand_aliases || setopt aliases
+#          source env.sh
+#          CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@Full"
+
     - name: Tear down
       if: ${{ always() }}
       run: |

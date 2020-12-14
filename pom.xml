@@ -13,7 +13,7 @@
         <cucumber.version>6.8.1</cucumber.version>
         <junit.version>4.13</junit.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <cassandra.driver.version>4.9.0</cassandra.driver.version>
+        <cassandra.driver.version>3.10.2</cassandra.driver.version>
     </properties>
 
     <dependencies>
@@ -39,8 +39,8 @@
         </dependency>
 
         <dependency>
-            <groupId>com.datastax.oss</groupId>
-            <artifactId>java-driver-core</artifactId>
+            <groupId>com.datastax.cassandra</groupId>
+            <artifactId>cassandra-driver-core</artifactId>
             <version>${cassandra.driver.version}</version>
             <scope>test</scope>
         </dependency>
@@ -51,6 +51,14 @@
             <version>4.0-beta3</version>
             <scope>test</scope>
         </dependency>
+
+        <dependency>
+            <groupId>com.jcraft</groupId>
+            <artifactId>jsch</artifactId>
+            <version>0.1.55</version>
+            <scope>test</scope>
+        </dependency>
+
 
     </dependencies>
 

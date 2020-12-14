@@ -1,11 +1,17 @@
 package rtest;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
+import io.cucumber.java.After;
+import io.cucumber.java.Before;
+import io.cucumber.java.Scenario;
 import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
-import rtest.cassandra.CcmCluster;
+import rtest.cassandra.AwsRtestCluster;
+import rtest.cassandra.CcmRtestCluster;
+import rtest.cassandra.RtestCluster;
 import rtest.minireaper.MiniReaper;
 
 import java.util.Map;
@@ -15,17 +21,74 @@ import static org.junit.Assert.*;
 
 public class StepDefinitions {
 
-  CcmCluster cluster;
+  String clusterKind;
+  String contactPoint;
+  RtestCluster cluster;
   MiniReaper miniReaper;
+
+  @Before
+  public void setUp(Scenario scenario) {
+    Map<String, String> envVars = System.getenv();
+    this.contactPoint = envVars.getOrDefault("CLUSTER_CONTACT_POINT0", "localhost");
+    this.clusterKind = envVars.getOrDefault("CLUSTER_KIND", "ccm");
+
+    if (this.clusterKind.equalsIgnoreCase("ccm")) {
+      initCcmCluster();
+    } else if (this.clusterKind.equalsIgnoreCase("aws")) {
+      initAwsCluster();
+    } else {
+      throw new RuntimeException(String.format("Unknown cluster kind: %s", this.clusterKind));
+    }
+  }
+
+  @After
+  public void cleanUp() {
+    cluster.shutDown();
+    miniReaper.shutdown();
+  }
+
+  private void initCcmCluster() {
+    cluster = new CcmRtestCluster(this.contactPoint, 9042);
+    miniReaper = new MiniReaper(cluster, ImmutableMap.of("127.0.0.1", 7100, "127.0.0.2", 7200, "127.0.0.3", 7300));
+  }
+
+  private void initAwsCluster() {
+    cluster = new AwsRtestCluster(this.contactPoint, 9042);
+    miniReaper = new MiniReaper(cluster, Maps.newHashMap());
+  }
 
   @Given("a cluster is running and reachable")
   public void aClusterIsRunningAndReachable() {
-    cluster = new CcmCluster("localhost", 9042, "datacenter1");
     assertTrue(cluster.isUp());
-
-    miniReaper = new MiniReaper(cluster, ImmutableMap.of("127.0.0.1", 7100, "127.0.0.2", 7200, "127.0.0.3", 7300));
     assertTrue(miniReaper.isUp());
   }
+
+  @And("the cluster has {int} nodes")
+  public void theClusterHasNodes(int nodeCount) {
+    assertEquals(
+        "Cluster has unexpected number of nodes",
+        nodeCount, cluster.getHosts().size()
+    );
+  }
+
+  @Then("we can run shell commands on all nodes")
+  public void weCanRunShellCommandsOnAllNodes() {
+    for (String host : cluster.getHosts()) {
+      assertTrue(
+          String.format("Could not run shell commands on node %s", host),
+          cluster.canRunShellCommands(host)
+      );
+    }
+  }
+
+  @And("keyspace {string} is present")
+  public void keyspaceIsPresent(String keyspaceName) {
+    assertTrue(
+        "The keyspace is not present",
+        cluster.keyspaceIsPresent(keyspaceName)
+    );
+  }
+
 
   @And("I cleanup the logs")
   public void iCleanupTheLogs() {

@@ -3,7 +3,7 @@ package rtest.minireaper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import org.apache.commons.lang3.tuple.Pair;
-import rtest.cassandra.CcmCluster;
+import rtest.cassandra.RtestCluster;
 
 import javax.management.Notification;
 import javax.management.NotificationListener;
@@ -26,12 +26,12 @@ public class MiniReaper implements NotificationListener {
 
   private int latestRepairCommandId = -1;
 
-  public MiniReaper(CcmCluster cluster, Map<String, Integer> jmxPorts) {
+  public MiniReaper(RtestCluster cluster, Map<String, Integer> jmxPorts) {
     this.jmxConnections = connect(cluster, jmxPorts);
     this.isUp = true;
   }
 
-  private Map<String, JmxProxy> connect(CcmCluster cluster, Map<String, Integer> jmxPorts) {
+  private Map<String, JmxProxy> connect(RtestCluster cluster, Map<String, Integer> jmxPorts) {
     List<String> hosts = cluster.getHosts();
     return hosts.stream().map(hostName -> {
       int jmxPort = jmxPorts.getOrDefault(hostName, 7199);

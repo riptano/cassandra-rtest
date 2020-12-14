@@ -7,12 +7,12 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.List;
 
-public class CcmCluster extends Cluster {
+public class CcmRtestCluster extends RtestCluster {
 
   private final String clusterName;
 
-  public CcmCluster(String contactHost, int contactPort, String contactDatacenter) {
-    super(contactHost, contactPort, contactDatacenter);
+  public CcmRtestCluster(String contactHost, int contactPort) {
+    super(contactHost, contactPort);
     clusterName = runCmd("cat ~/.ccm/CURRENT").get(0);
   }
 
@@ -61,7 +61,6 @@ public class CcmCluster extends Cluster {
     ));
 
     runCmd("ccm start");
-    reconnect();
 
     runCmd(String.format("ccm node2 nodetool compact"));
     runCmd(String.format("ccm node3 nodetool compact"));
@@ -73,6 +72,11 @@ public class CcmCluster extends Cluster {
     runCmd("ccm node3 cqlsh -e \"TRUNCATE TABLE system.repairs;\"");
     runCmd("ccm node3 cqlsh -e \"TRUNCATE TABLE system.repairs;\"");
     runCmd("ccm node3 cqlsh -e \"TRUNCATE TABLE system.repairs;\"");
+  }
+
+  @Override
+  public boolean canRunShellCommands(String host) {
+    return true;
   }
 
   private List<String> runCmd(String cmd) {
