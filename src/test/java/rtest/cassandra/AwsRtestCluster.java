@@ -98,6 +98,7 @@ public class AwsRtestCluster extends RtestCluster {
       channel.setErrStream(System.err);
       InputStream in = channel.getInputStream();
 
+      channel.connect();
 
       byte[] tmp = new byte[1024];
       while (true) {
@@ -119,7 +120,6 @@ public class AwsRtestCluster extends RtestCluster {
           command, host, e.getMessage()));
     }
 
-    System.out.printf("Command: %s | Output: %s", command, commandOutput);
     return exitStatus;
   }
 

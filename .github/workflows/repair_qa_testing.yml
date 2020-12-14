@@ -77,6 +77,16 @@ jobs:
           sed -i 's/com.sun.management.jmxremote.authenticate=true/com.sun.management.jmxremote.authenticate=false/' provisioning/cassandra/conf/cassandra-env.sh
           echo "Installing packages..."
           timeout --foreground 600 tlp-cluster install > install.log 2>&1 || echo "meh... install phase seem to have failed" > /dev/null 2>&1
+          # after configuring instances, but before starting them, patch cassandra-env to open jmx on public IPs
+          shopt -s expand_aliases || setopt aliases
+          source env.sh
+          ssh ${CLUSTER_CONTACT_POINT0} "sudo chmod 666 /etc/cassandra/cassandra-env.sh"
+          ssh ${CLUSTER_CONTACT_POINT1} "sudo chmod 666 /etc/cassandra/cassandra-env.sh"
+          ssh ${CLUSTER_CONTACT_POINT2} "sudo chmod 666 /etc/cassandra/cassandra-env.sh"
+          ssh ${CLUSTER_CONTACT_POINT0} "sudo echo 'JVM_OPTS=\"\$JVM_OPTS -Djava.rmi.server.hostname=${CLUSTER_CONTACT_POINT0}\"' >> /etc/cassandra/cassandra-env.sh"
+          ssh ${CLUSTER_CONTACT_POINT1} "sudo echo 'JVM_OPTS=\"\$JVM_OPTS -Djava.rmi.server.hostname=${CLUSTER_CONTACT_POINT1}\"' >> /etc/cassandra/cassandra-env.sh"
+          ssh ${CLUSTER_CONTACT_POINT2} "sudo echo 'JVM_OPTS=\"\$JVM_OPTS -Djava.rmi.server.hostname=${CLUSTER_CONTACT_POINT2}\"' >> /etc/cassandra/cassandra-env.sh"
+          c_all grep hostname /etc/cassandra/cassandra-env.sh
           echo "Starting Cassandra..."
           timeout --foreground 600 tlp-cluster start > start.log 2>&1 || echo "meh... start phase seem to have failed" > /dev/null 2>&1
 
