@@ -4,6 +4,7 @@ import com.jcraft.jsch.*;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Map;
 
 import static java.util.stream.Collectors.toMap;
@@ -20,28 +21,35 @@ public class AwsRtestCluster extends RtestCluster {
 
   private final Map<String, Session> sshSessions;
 
-  public AwsRtestCluster(String host, int port) {
-    super(host, port);
+  public AwsRtestCluster(List<String> hosts, int port) {
+    super(hosts, port);
     try {
       jsch.addIdentity(SSH_KEY_PATH);
     } catch (JSchException e) {
       throw new RuntimeException("Could not load SSH identity file", e);
     }
 
-    this.sshSessions = openSessions();
+    try {
+      jsch.setKnownHosts("/dev/null");
+    } catch (JSchException e) {
+      throw new RuntimeException("Could not set KnownHosts file", e);
+    }
+
+    this.sshSessions = openSessions(hosts);
   }
 
-  private Map<String, Session> openSessions() {
-    return super.getHosts().stream()
-        .collect(toMap(
-            host -> host,
-            this::openSession
-        ));
+  private Map<String, Session> openSessions(List<String> hosts) {
+    return hosts.stream().collect(toMap(
+        host -> host,
+        this::openSession
+    ));
   }
 
   private Session openSession(String host) {
     try {
       Session session = this.jsch.getSession(this.sshUser, host, 22);
+      session.setConfig("HashKnownHosts",  "no");
+      session.setConfig("StrictHostKeyChecking", "no");
       session.setUserInfo(jschUserInfo);
       session.connect();
       return session;

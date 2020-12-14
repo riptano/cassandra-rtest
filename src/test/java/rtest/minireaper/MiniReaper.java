@@ -32,7 +32,7 @@ public class MiniReaper implements NotificationListener {
   }
 
   private Map<String, JmxProxy> connect(RtestCluster cluster, Map<String, Integer> jmxPorts) {
-    List<String> hosts = cluster.getHosts();
+    List<String> hosts = cluster.getContactPoints();
     return hosts.stream().map(hostName -> {
       int jmxPort = jmxPorts.getOrDefault(hostName, 7199);
       JmxProxy jmxProxy = JmxProxy.connect(hostName, jmxPort);

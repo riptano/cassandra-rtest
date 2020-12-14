@@ -11,14 +11,14 @@ public class CcmRtestCluster extends RtestCluster {
 
   private final String clusterName;
 
-  public CcmRtestCluster(String contactHost, int port) {
-    super(contactHost, port);
+  public CcmRtestCluster(List<String> contactHosts, int port) {
+    super(contactHosts, port);
     clusterName = runCmd("cat ~/.ccm/CURRENT").get(0);
   }
 
   @Override
   public void cleanUpLogs() {
-    for (int i = 1; i <= super.getHosts().size(); i++) {
+    for (int i = 1; i <= super.getContactPoints().size(); i++) {
       String cmd = String.format("echo -n > ~/.ccm/%s/node%d/logs/system.log", clusterName, i);
       runCmd(cmd);
     }
@@ -27,7 +27,7 @@ public class CcmRtestCluster extends RtestCluster {
   @Override
   public boolean logsAreEmpty() {
     int logSizeSum = 0;
-    for (int i = 1; i <= super.getHosts().size(); i++) {
+    for (int i = 1; i <= super.getContactPoints().size(); i++) {
       String cmd = String.format(
           "ls -l %s/.ccm/%s/node%d/logs/system.log | awk '{print $5}'",
           System.getProperty("user.home"), clusterName, i

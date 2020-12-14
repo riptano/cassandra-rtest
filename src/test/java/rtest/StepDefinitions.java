@@ -14,22 +14,37 @@ import rtest.cassandra.CcmRtestCluster;
 import rtest.cassandra.RtestCluster;
 import rtest.minireaper.MiniReaper;
 
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 
+import static java.util.stream.Collectors.toList;
 import static org.junit.Assert.*;
 
 public class StepDefinitions {
 
   String clusterKind;
-  String contactPoint;
+  List<String> contactPoints;
   RtestCluster cluster;
   MiniReaper miniReaper;
 
   @Before
   public void setUp(Scenario scenario) {
     Map<String, String> envVars = System.getenv();
-    this.contactPoint = envVars.getOrDefault("CLUSTER_CONTACT_POINT0", "localhost");
+
+    // try parse the env variables provided by tlp-cluster
+    this.contactPoints = envVars.keySet().stream()
+        .filter(key -> key.startsWith("CLUSTER_CONTACT_POINT"))
+        .map(envVars::get)
+        .collect(toList());
+
+    // we did not find any, so let's default to localhost
+    if (this.contactPoints.size() == 0) {
+      this.contactPoints.add("127.0.0.1");
+      this.contactPoints.add("127.0.0.2");
+      this.contactPoints.add("127.0.0.3");
+    }
+
     this.clusterKind = envVars.getOrDefault("CLUSTER_KIND", "ccm");
 
     if (this.clusterKind.equalsIgnoreCase("ccm")) {
@@ -52,12 +67,12 @@ public class StepDefinitions {
   }
 
   private void initCcmCluster() {
-    cluster = new CcmRtestCluster(this.contactPoint, 9042);
+    cluster = new CcmRtestCluster(this.contactPoints, 9042);
     miniReaper = new MiniReaper(cluster, ImmutableMap.of("127.0.0.1", 7100, "127.0.0.2", 7200, "127.0.0.3", 7300));
   }
 
   private void initAwsCluster() {
-    cluster = new AwsRtestCluster(this.contactPoint, 9042);
+    cluster = new AwsRtestCluster(this.contactPoints, 9042);
     miniReaper = new MiniReaper(cluster, Maps.newHashMap());
   }
 
@@ -71,13 +86,13 @@ public class StepDefinitions {
   public void theClusterHasNodes(int nodeCount) {
     assertEquals(
         "Cluster has unexpected number of nodes",
-        nodeCount, cluster.getHosts().size()
+        nodeCount, cluster.getNodeCount()
     );
   }
 
   @Then("we can run shell commands on all nodes")
   public void weCanRunShellCommandsOnAllNodes() {
-    for (String host : cluster.getHosts()) {
+    for (String host : cluster.getContactPoints()) {
       assertTrue(
           String.format("Could not run shell commands on node %s", host),
           cluster.canRunShellCommands(host)

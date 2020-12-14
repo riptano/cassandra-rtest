@@ -1,30 +1,30 @@
 package rtest.cassandra;
 
 
-import com.datastax.driver.core.*;
+import com.datastax.driver.core.AbstractTableMetadata;
+import com.datastax.driver.core.Cluster;
+import com.datastax.driver.core.KeyspaceMetadata;
+import com.datastax.driver.core.Session;
 
-import java.net.InetAddress;
 import java.util.List;
 
 import static java.util.stream.Collectors.toList;
 
 public abstract class RtestCluster {
 
+  protected final List<String> contactPoints;
   protected Cluster cluster;
   protected Session cqlSession;
-  private String host;
-  private int port;
 
-  protected RtestCluster(String host, int port) {
-    this.host = host;
-    this.port = port;
-    this.cluster = connect(host, port);
+  protected RtestCluster(List<String> hosts, int port) {
+    this.contactPoints = hosts;
+    this.cluster = connect(hosts, port);
     this.cqlSession = cluster.newSession();
   }
 
-  private Cluster connect(String host, int port) {
+  private Cluster connect(List<String> hosts, int port) {
     return Cluster.builder()
-        .addContactPoint(host)
+        .addContactPoints(hosts.toArray(new String[hosts.size()]))
         .withPort(port)
         .build();
   }
@@ -37,12 +37,12 @@ public abstract class RtestCluster {
     return this.cqlSession;
   }
 
-  public List<String> getHosts() {
-    return cluster.getMetadata().getAllHosts().stream()
-        .map(Host::getBroadcastAddress)
-        .map(InetAddress::toString)
-        .map(s -> s.replace("/", ""))
-        .collect(toList());
+  public List<String> getContactPoints() {
+    return this.contactPoints;
+  }
+
+  public int getNodeCount() {
+    return this.cluster.getMetadata().getAllHosts().size();
   }
 
   public boolean keyspaceIsPresent(String keyspaceName) {
