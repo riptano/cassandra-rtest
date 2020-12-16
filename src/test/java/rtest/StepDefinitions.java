@@ -294,4 +294,12 @@ public class StepDefinitions {
     );
   }
 
+  @When("we restore a backup called {string}")
+  public void weRestoreABackupCalled(String backupName) {
+    assertTrue(
+      "Restoring backup failed",
+      cluster.restoreBackup(backupName)
+    );
+  }
+
 }

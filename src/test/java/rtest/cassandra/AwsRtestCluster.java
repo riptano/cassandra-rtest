@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
+import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 
 public class AwsRtestCluster extends RtestCluster {
@@ -87,32 +88,40 @@ public class AwsRtestCluster extends RtestCluster {
     return rc == 0;
   }
 
+  @Override
+  public boolean restoreBackup(String backupName) {
+    String alwaysTheSameHost = getContactPoints()
+        .stream()
+        .sorted(String::compareTo)
+        .collect(toList())
+        .get(1);
+    String tempDir = "/var/lib/cassandra/";
+    String cmd = String.format(
+        "medusa -v restore-cluster --backup-name %s --bypass-checks --temp-dir %s", backupName, tempDir
+    );
+
+    return 0 == runCommand(alwaysTheSameHost, cmd);
+  }
+
   private int runCommand(String host, String command) {
     int exitStatus;
-    String commandOutput = "";
     Session session = sshSessions.get(host);
     try {
       ChannelExec channel = (ChannelExec) session.openChannel("exec");
       channel.setCommand(command);
       channel.setInputStream(null);
       channel.setErrStream(System.err);
-      InputStream in = channel.getInputStream();
 
       channel.connect();
 
-      byte[] tmp = new byte[1024];
-      while (true) {
-        while (in.available() > 0) {
-          int i = in.read(tmp, 0, 1024);
-          if (i < 0) break;
-          commandOutput = new String(tmp, 0, i);
-        }
-        if (channel.isClosed()) {
-          exitStatus = channel.getExitStatus();
-          break;
-        }
-        try {Thread.sleep(1000);} catch (Exception ignored) {}
-      }
+      String stdout = readStream(channel, channel.getInputStream());
+      String stderr = readStream(channel, channel.getErrStream());
+      exitStatus = channel.getExitStatus();
+
+      System.out.printf("Command '%s' completed with: %d%n", command, exitStatus);
+      System.out.printf("Output was: %s", stdout);
+      System.out.printf("Error was: %s", stderr);
+
       channel.disconnect();
     } catch (JSchException | IOException e) {
       throw new RuntimeException(String.format(
@@ -121,6 +130,30 @@ public class AwsRtestCluster extends RtestCluster {
     }
 
     return exitStatus;
+  }
+
+  private String readStream(ChannelExec channel, InputStream s) {
+    try {
+      String output = "";
+      byte[] tmp = new byte[1024];
+      while (true) {
+        while (s.available() > 0) {
+          int i = s.read(tmp, 0, 1024);
+          if (i < 0) break;
+          output = new String(tmp, 0, i);
+        }
+        if (channel.isClosed()) {
+          break;
+        }
+        try {
+          Thread.sleep(1000);
+        } catch (Exception ignored) {
+        }
+      }
+      return output;
+    } catch (IOException e) {
+      throw new RuntimeException(String.format("Reading output failed: %s", e.getMessage()), e);
+    }
   }
 
   private static class AuthKeyUserInfo implements UserInfo {

@@ -97,14 +97,12 @@ jobs:
       if: ${{ success() }}
       shell: bash
       run: |
-        set -x
         shopt -s expand_aliases || setopt aliases
         source env.sh
         mkdir -p /home/runner/.aws
         echo "${{ secrets.ALEX_GITHUB_ACTIONS_AWS_CREDENTIALS }}" >> /home/runner/.aws/credentials
         chmod 600 /home/runner/.aws/credentials
-        install_medusa.sh -b cassandra-repair-qa -c /home/runner/.aws/credentials -s s3_us_west_oregon
-        c0 "medusa list-backups | grep repair-qa-full"
+        install_medusa.sh -b cassandra-repair-qa -c /home/runner/.aws/credentials -s s3_us_west_oregon -p tlp-cluster
 
     - name: Check if test scenarios can run
       if: ${{ success() }}

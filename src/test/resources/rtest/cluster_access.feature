@@ -9,5 +9,11 @@ Feature: Cluster access
     Given a cluster is running and reachable
     And the cluster has 3 nodes
     Then we can run shell commands on all nodes
-    And keyspace "repair_quality" is present
+
+  Scenario: Validate Medusa can restore a backup
+    Given a cluster is running and reachable
+    And the cluster has 3 nodes
+    Then we can run shell commands on all nodes
+    When we restore a backup called "repair-qa-small"
+    Then keyspace "repair_quality" is present
     And keyspace "repair_quality_rf2" is present

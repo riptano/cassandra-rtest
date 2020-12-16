@@ -78,4 +78,5 @@ public abstract class RtestCluster {
 
   public abstract boolean canRunShellCommands(String host);
 
+  public abstract boolean restoreBackup(String backupName);
 }

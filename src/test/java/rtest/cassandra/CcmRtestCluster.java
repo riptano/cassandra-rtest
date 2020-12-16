@@ -79,6 +79,11 @@ public class CcmRtestCluster extends RtestCluster {
     return true;
   }
 
+  @Override
+  public boolean restoreBackup(String backupName) {
+    return true;
+  }
+
   private List<String> runCmd(String cmd) {
     try {
       Process process = Runtime.getRuntime().exec(new String[]{"/bin/bash", "-c", cmd});
