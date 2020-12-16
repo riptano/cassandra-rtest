@@ -40,11 +40,11 @@ public class CcmRtestCluster extends RtestCluster {
 
   @Override
   public void restoreInitialStateBackup() {
-    cqlSession.execute("TRUNCATE TABLE system_distributed.parent_repair_history");
-    cqlSession.execute("TRUNCATE TABLE system_distributed.repair_history");
-    cqlSession.execute("TRUNCATE TABLE system.repairs");
+    getSession().execute("TRUNCATE TABLE system_distributed.parent_repair_history");
+    getSession().execute("TRUNCATE TABLE system_distributed.repair_history");
+    getSession().execute("TRUNCATE TABLE system.repairs");
 
-    cqlSession.close();
+    getSession().close();
 
     runCmd("ccm stop");
 

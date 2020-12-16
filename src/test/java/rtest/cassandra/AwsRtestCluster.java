@@ -51,6 +51,7 @@ public class AwsRtestCluster extends RtestCluster {
       Session session = this.jsch.getSession(this.sshUser, host, 22);
       session.setConfig("HashKnownHosts",  "no");
       session.setConfig("StrictHostKeyChecking", "no");
+      session.setConfig("PreferredAuthentications", "publickey");
       session.setUserInfo(jschUserInfo);
       session.connect();
       return session;
@@ -97,10 +98,15 @@ public class AwsRtestCluster extends RtestCluster {
         .get(1);
     String tempDir = "/var/lib/cassandra/";
     String cmd = String.format(
-        "medusa -v restore-cluster --backup-name %s --bypass-checks --temp-dir %s", backupName, tempDir
+        "medusa -v restore-cluster --backup-name %s --bypass-checks --temp-dir %s --verify", backupName, tempDir
     );
 
-    return 0 == runCommand(alwaysTheSameHost, cmd);
+    int backupRestoreCommandRc = runCommand(alwaysTheSameHost, cmd);
+
+    runCommand(alwaysTheSameHost, "echo \"DESCRIBE KEYSPACES;\" | cqlsh $(hostname) 9042");
+
+    connect();
+    return backupRestoreCommandRc == 0;
   }
 
   private int runCommand(String host, String command) {

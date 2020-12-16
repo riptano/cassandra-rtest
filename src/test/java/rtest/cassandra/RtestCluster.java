@@ -5,6 +5,7 @@ import com.datastax.driver.core.AbstractTableMetadata;
 import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.KeyspaceMetadata;
 import com.datastax.driver.core.Session;
+import com.google.common.collect.Lists;
 
 import java.util.List;
 
@@ -12,50 +13,61 @@ import static java.util.stream.Collectors.toList;
 
 public abstract class RtestCluster {
 
-  protected final List<String> contactPoints;
-  protected Cluster cluster;
-  protected Session cqlSession;
+  protected final String[] contactPoints;
+  private final int contactPort;
+
+  private Cluster cluster;
+  private Session cqlSession;
 
   protected RtestCluster(List<String> hosts, int port) {
-    this.contactPoints = hosts;
-    this.cluster = connect(hosts, port);
+    this.contactPoints = hosts.toArray(new String[hosts.size()]);
+    this.contactPort = port;
+    connect();
+  }
+
+  protected void connect() {
+    this.cluster = Cluster.builder()
+        .addContactPoints(contactPoints)
+        .withPort(contactPort)
+        .build();
     this.cqlSession = cluster.newSession();
   }
 
-  private Cluster connect(List<String> hosts, int port) {
-    return Cluster.builder()
-        .addContactPoints(hosts.toArray(new String[hosts.size()]))
-        .withPort(port)
-        .build();
+  public boolean isUp() {
+    return this.getSession() != null && !this.getSession().isClosed();
   }
 
-  public boolean isUp() {
-    return this.cqlSession != null;
+  public Cluster getCluster() {
+    if (this.cluster.isClosed()) {
+      this.connect();
+    }
+    return this.cluster;
   }
 
   public Session getSession() {
+    if (this.cqlSession.isClosed() || this.cluster.isClosed()) {
+      this.connect();
+    }
     return this.cqlSession;
   }
 
   public List<String> getContactPoints() {
-    return this.contactPoints;
+    return Lists.newArrayList(this.contactPoints);
   }
 
   public int getNodeCount() {
-    return this.cluster.getMetadata().getAllHosts().size();
+    return this.getCluster().getMetadata().getAllHosts().size();
   }
 
   public boolean keyspaceIsPresent(String keyspaceName) {
-    try {
-      KeyspaceMetadata ksmd = cluster.getMetadata().getKeyspace(keyspaceName);
-      return ksmd != null;
-    } catch (Exception e) {
-      return false;
-    }
+      return cluster.getMetadata()
+          .getKeyspaces()
+          .stream()
+          .anyMatch(ks -> ks.getName().equals(keyspaceName));
   }
 
   public List<String> getTableNamesIn(String keyspace) {
-    return cluster.getMetadata().getKeyspace(keyspace).getTables()
+    return getCluster().getMetadata().getKeyspace(keyspace).getTables()
         .stream()
         .map(AbstractTableMetadata::getName)
         .collect(toList());
