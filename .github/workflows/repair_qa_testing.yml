@@ -96,15 +96,10 @@ jobs:
     - name: Install and configure Medusa
       if: ${{ success() }}
       shell: bash
-      env:
-        HOSTALIASES: /home/runner/.hosts
       run: |
         set -x
         shopt -s expand_aliases || setopt aliases
         source env.sh
-        echo "${CLUSTER_CONTACT_POINT0} cassandra0" >> /home/runner/.hosts
-        echo "${CLUSTER_CONTACT_POINT1} cassandra1" >> /home/runner/.hosts
-        echo "${CLUSTER_CONTACT_POINT2} cassandra2" >> /home/runner/.hosts
         mkdir -p /home/runner/.aws
         echo "${{ secrets.ALEX_GITHUB_ACTIONS_AWS_CREDENTIALS }}" >> /home/runner/.aws/credentials
         chmod 600 /home/runner/.aws/credentials
