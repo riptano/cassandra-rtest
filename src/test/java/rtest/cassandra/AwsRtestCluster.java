@@ -108,6 +108,7 @@ public class AwsRtestCluster extends RtestCluster {
     Session session = sshSessions.get(host);
     try {
       ChannelExec channel = (ChannelExec) session.openChannel("exec");
+      channel.setAgentForwarding(true);
       channel.setCommand(command);
       channel.setInputStream(null);
       channel.setErrStream(System.err);
