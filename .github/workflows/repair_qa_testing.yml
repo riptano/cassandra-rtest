@@ -111,12 +111,12 @@ jobs:
         source env.sh
         CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@DryRun"
 
-#    - name: Run test scenarios
-#      if: ${{ success() }}
-#      run: |
-#          shopt -s expand_aliases || setopt aliases
-#          source env.sh
-#          CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@Full"
+    - name: Run test scenarios
+      if: ${{ success() }}
+      run: |
+          shopt -s expand_aliases || setopt aliases
+          source env.sh
+          CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@Full"
 
     - name: Tear down
       if: ${{ always() }}

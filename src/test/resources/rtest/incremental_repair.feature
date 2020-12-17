@@ -5,7 +5,7 @@ Feature: Incremental Repair
   Scenario Outline: Complete incremental repair without triggering compaction
     Given a cluster is running and reachable
     And I cleanup the logs
-    And I restore the initial state backup
+    And we restore a backup called "repair-qa-small"
     And a "incremental" repair would find out-of-sync "<tokens>" ranges for keyspace "repair_quality"
     When a repair of "repair_quality" keyspace in "incremental" mode with "<parallelism>" validation on "<tokens>" ranges runs
     Then repair finishes within a timeout of 180 minutes
@@ -20,7 +20,7 @@ Feature: Incremental Repair
   Scenario Outline: Complete incremental repair with compaction triggered while validation compaction runs
     Given a cluster is running and reachable
     And I cleanup the logs
-    And I restore the initial state backup
+    And we restore a backup called "repair-qa-small"
     And a "incremental" repair would find out-of-sync "<tokens>" ranges for keyspace "repair_quality"
     And all SSTables in "repair_quality" keyspace have a repairedAt value that is equal to zero
     When a repair of "repair_quality" keyspace in "incremental" mode with "<parallelism>" validation on "<tokens>" ranges runs
@@ -39,7 +39,7 @@ Feature: Incremental Repair
   Scenario Outline: Force terminate incremental repair
     Given a cluster is running and reachable
     And I cleanup the logs
-    And I restore the initial state backup
+    And we restore a backup called "repair-qa-small"
     When a repair of "repair_quality" keyspace in "incremental" mode with "<parallelism>" validation on "<tokens>" ranges runs
     Then I wait for validation compactions for any table in "repair_quality" keyspace to start
     When I force terminate the repair

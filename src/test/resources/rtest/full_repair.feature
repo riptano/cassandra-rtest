@@ -5,7 +5,7 @@ Feature: Full Repair
   Scenario Outline: Complete full repair
     Given a cluster is running and reachable
     And I cleanup the logs
-    And I restore the initial state backup
+    And we restore a backup called "repair-qa-small"
     And a "full" repair would find out-of-sync "<tokens>" ranges for keyspace "repair_quality"
     When a repair of "repair_quality" keyspace in "full" mode with "<parallelism>" validation on "<tokens>" ranges runs
     Then repair finishes within a timeout of 180 minutes
@@ -20,7 +20,7 @@ Feature: Full Repair
   Scenario Outline: Force terminate full repair
     Given a cluster is running and reachable
     And I cleanup the logs
-    And I restore the initial state backup
+    And we restore a backup called "repair-qa-small"
     When a repair of "repair_quality" keyspace in "full" mode with "<parallelism>" validation on "<tokens>" ranges runs
     Then I wait for validation compactions for any table in "repair_quality" keyspace to start
     When I force terminate the repair

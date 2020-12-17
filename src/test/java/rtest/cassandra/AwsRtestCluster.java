@@ -70,12 +70,21 @@ public class AwsRtestCluster extends RtestCluster {
 
   @Override
   public void cleanUpLogs() {
-
+    String cmd = "sudo bash -c \"echo -n > /var/log/cassandra/system.log\"";
+    sshSessions.keySet().forEach(host -> runCommand(host, cmd));
   }
 
   @Override
   public boolean logsAreEmpty() {
-    return false;
+    String cmd = "ls -l /var/log/cassandra/system.log | awk '{print $5}'";
+    Long sumLogSizes = sshSessions.keySet().stream()
+        .map(host -> runCommand(host, cmd).stdout.replace('"', ' ').trim())
+        .map(Long::parseLong)
+        .reduce(0L, Long::sum);
+    // there is a race condition between us clearing the logs and checking sizes
+    // it can happen that C* will log something
+    // therefore we allow 512 bytes of content per node
+    return sumLogSizes < 512L * sshSessions.size();
   }
 
   @Override
@@ -85,7 +94,7 @@ public class AwsRtestCluster extends RtestCluster {
 
   @Override
   public boolean canRunShellCommands(String host) {
-    int rc = runCommand(host, "whoami");
+    int rc = runCommand(host, "whoami").exitStatus;
     return rc == 0;
   }
 
@@ -101,16 +110,35 @@ public class AwsRtestCluster extends RtestCluster {
         "medusa -v restore-cluster --backup-name %s --bypass-checks --temp-dir %s --verify", backupName, tempDir
     );
 
-    int backupRestoreCommandRc = runCommand(alwaysTheSameHost, cmd);
+    CommandResult commandResult = runCommand(alwaysTheSameHost, cmd);
+    if (commandResult.exitStatus != 0) {
+      System.out.printf("Command exited with code: %d%n", commandResult.exitStatus);
+      System.out.printf("Stdout was: %s", commandResult.stdout);
+      System.out.printf("Stderr was: %s", commandResult.stderr);
+    }
 
-    runCommand(alwaysTheSameHost, "echo \"DESCRIBE KEYSPACES;\" | cqlsh $(hostname) 9042");
-
+    // re-connect the cql session after the restore
     connect();
-    return backupRestoreCommandRc == 0;
+
+    return commandResult.exitStatus == 0;
   }
 
-  private int runCommand(String host, String command) {
+  public static class CommandResult {
     int exitStatus;
+    String stdout;
+    String stderr;
+
+    public CommandResult(int rc, String out, String err) {
+      this.exitStatus = rc;
+      this.stdout = out;
+      this.stderr = err;
+    }
+  }
+
+  private CommandResult runCommand(String host, String command) {
+    int exitStatus;
+    String stdout = "";
+    String stderr = "";
     Session session = sshSessions.get(host);
     try {
       ChannelExec channel = (ChannelExec) session.openChannel("exec");
@@ -121,22 +149,18 @@ public class AwsRtestCluster extends RtestCluster {
 
       channel.connect();
 
-      String stdout = readStream(channel, channel.getInputStream());
-      String stderr = readStream(channel, channel.getErrStream());
+      stdout = readStream(channel, channel.getInputStream());
+      stderr = readStream(channel, channel.getErrStream());
       exitStatus = channel.getExitStatus();
-
-      System.out.printf("Command '%s' completed with: %d%n", command, exitStatus);
-      System.out.printf("Output was: %s", stdout);
-      System.out.printf("Error was: %s", stderr);
 
       channel.disconnect();
     } catch (JSchException | IOException e) {
       throw new RuntimeException(String.format(
-          "Running command '%s' on host '%s' failed: %S",
-          command, host, e.getMessage()));
+          "Running command '%s' on host '%s' failed: %s\nStdout was:\n%s\nStderr was:\n%s\n",
+          command, host, e.getMessage(), stdout, stderr));
     }
 
-    return exitStatus;
+    return new CommandResult(exitStatus, stdout, stderr);
   }
 
   private String readStream(ChannelExec channel, InputStream s) {
