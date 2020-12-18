@@ -33,6 +33,26 @@ public abstract class RtestCluster {
     this.cqlSession = cluster.newSession();
   }
 
+  protected void reConnect() {
+    int retries = 0;
+    long sleepExponent = 2;
+    long sleepMs = 1000;
+    while (retries < 10)
+    try {
+      connect();
+      // force the driver to connect internally by asking for a keyspace
+      keyspaceIsPresent("system");
+      return;
+    } catch (Exception e) {
+      try {Thread.sleep(sleepMs);} catch (InterruptedException ignored) {}
+      sleepMs = 1000 * sleepExponent;
+      sleepExponent *= 2;
+      retries++;
+    }
+
+    throw new RuntimeException("Could not re-connect to the cluster.");
+  }
+
   public boolean isUp() {
     return this.getSession() != null && !this.getSession().isClosed();
   }

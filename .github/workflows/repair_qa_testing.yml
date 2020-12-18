@@ -102,7 +102,7 @@ jobs:
         mkdir -p /home/runner/.aws
         echo "${{ secrets.ALEX_GITHUB_ACTIONS_AWS_CREDENTIALS }}" >> /home/runner/.aws/credentials
         chmod 600 /home/runner/.aws/credentials
-        install_medusa.sh -b cassandra-repair-qa -c /home/runner/.aws/credentials -s s3_us_west_oregon -p tlp-cluster
+        install_medusa.sh -b cassandra-repair-qa -c /home/runner/.aws/credentials -s s3_us_west_oregon --prefix cassandra-qa --branch radovan/peers_v2 > install_medusa.log
 
     - name: Check if test scenarios can run
       if: ${{ success() }}
@@ -111,12 +111,12 @@ jobs:
         source env.sh
         CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@DryRun"
 
-    - name: Run test scenarios
-      if: ${{ success() }}
-      run: |
-          shopt -s expand_aliases || setopt aliases
-          source env.sh
-          CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@Full"
+#    - name: Run test scenarios
+#      if: ${{ success() }}
+#      run: |
+#          shopt -s expand_aliases || setopt aliases
+#          source env.sh
+#          CLUSTER_KIND=aws mvn test -Dcucumber.filter.tags="@Full"
 
     - name: Tear down
       if: ${{ always() }}

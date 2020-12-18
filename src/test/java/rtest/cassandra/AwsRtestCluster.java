@@ -107,7 +107,7 @@ public class AwsRtestCluster extends RtestCluster {
         .get(1);
     String tempDir = "/var/lib/cassandra/";
     String cmd = String.format(
-        "medusa -v restore-cluster --backup-name %s --bypass-checks --temp-dir %s --verify", backupName, tempDir
+        "medusa -v restore-cluster --backup-name %s --bypass-checks --temp-dir %s > medusa_restore.log", backupName, tempDir
     );
 
     CommandResult commandResult = runCommand(alwaysTheSameHost, cmd);
@@ -118,7 +118,8 @@ public class AwsRtestCluster extends RtestCluster {
     }
 
     // re-connect the cql session after the restore
-    connect();
+    shutDown();
+    reConnect();
 
     return commandResult.exitStatus == 0;
   }

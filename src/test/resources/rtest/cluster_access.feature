@@ -14,6 +14,14 @@ Feature: Cluster access
     Given a cluster is running and reachable
     And the cluster has 3 nodes
     Then we can run shell commands on all nodes
-    When we restore a backup called "repair-qa-small"
+    When we restore a backup called "repair-qa-tiny"
+    Then keyspace "repair_quality" is present
+    And keyspace "repair_quality_rf2" is present
+
+  Scenario: Validate we can restore backup again using the same cluster
+    Given a cluster is running and reachable
+    And the cluster has 3 nodes
+    Then we can run shell commands on all nodes
+    When we restore a backup called "repair-qa-tiny"
     Then keyspace "repair_quality" is present
     And keyspace "repair_quality_rf2" is present
