@@ -300,6 +300,7 @@ public class StepDefinitions {
       "Restoring backup failed",
       cluster.restoreBackup(backupName)
     );
+    miniReaper.reconnect();
   }
 
 }

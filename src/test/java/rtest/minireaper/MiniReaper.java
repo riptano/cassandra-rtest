@@ -21,14 +21,16 @@ import static java.util.stream.Collectors.toMap;
 public class MiniReaper implements NotificationListener {
 
   private final ConcurrentLinkedDeque<RepairEvent> repairEvents = new ConcurrentLinkedDeque<>();
-  private final boolean isUp;
   private final Map<String, JmxProxy> jmxConnections;
+  private final List<String> contactPoints;
+  private final Map<String, Integer> contactPorts;
 
   private int latestRepairCommandId = -1;
 
   public MiniReaper(List<String> contactPoints, Map<String, Integer> jmxPorts) {
+    this.contactPoints = contactPoints;
+    this.contactPorts = jmxPorts;
     this.jmxConnections = connect(contactPoints, jmxPorts);
-    this.isUp = true;
   }
 
   private Map<String, JmxProxy> connect(List<String> contactPoints, Map<String, Integer> jmxPorts) {
@@ -39,8 +41,18 @@ public class MiniReaper implements NotificationListener {
     }).collect(toMap(Pair::getLeft, Pair::getRight));
   }
 
+  public void reconnect() {
+    this.jmxConnections.clear();
+    this.jmxConnections.putAll(connect(this.contactPoints, this.contactPorts));
+  }
+
   public boolean isUp() {
-    return this.isUp;
+    try {
+      jmxConnections.values().forEach(JmxProxy::hasActiveRepair);
+      return true;
+    } catch (Exception e) {
+      return false;
+    }
   }
 
   public boolean startRepairPreview(String keyspaceName, String tokenRanges, String repairMode) {
