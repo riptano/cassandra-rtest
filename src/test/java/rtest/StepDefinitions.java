@@ -1,5 +1,9 @@
 package rtest;
 
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import io.cucumber.java.After;
@@ -12,287 +16,331 @@ import io.cucumber.java.en.When;
 import rtest.cassandra.AwsRtestCluster;
 import rtest.cassandra.CcmRtestCluster;
 import rtest.cassandra.RtestCluster;
-import rtest.minireaper.MiniReaper;
-
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Stream;
+import rtest.cassandra.jmx.JmxFacade;
 
 import static java.util.stream.Collectors.toList;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
-public class StepDefinitions {
+public final class StepDefinitions
+{
 
-  String clusterKind;
-  List<String> contactPoints;
-  RtestCluster cluster;
-  MiniReaper miniReaper;
+    private static final int NATIVE_PORT = 9042;
+    private static final int CCM_JMX_NODE1_PORT = 7100;
+    private static final int CCM_JMX_NODE2_PORT = 7200;
+    private static final int CCM_JMX_NODE3_PORT = 7300;
+    private static final int COMPACTION_TIMEOUT_IN_MINS = 30;
+    private static final int JMX_RECONNECTION_ATTEMPTS = 5;
 
-  @Before
-  public void setUp(Scenario scenario) {
-    Map<String, String> envVars = System.getenv();
+    private String clusterKind;
+    private List<String> contactPoints;
+    private RtestCluster cluster;
+    private JmxFacade jmxFacade;
 
-    // try parse the env variables provided by tlp-cluster
-    this.contactPoints = envVars.keySet().stream()
-        .filter(key -> key.startsWith("CLUSTER_CONTACT_POINT"))
-        .map(envVars::get)
-        .collect(toList());
+    @Before
+    public void setUp(final Scenario scenario)
+    {
+        Map<String, String> envVars = System.getenv();
 
-    // we did not find any, so let's default to localhost
-    if (this.contactPoints.size() == 0) {
-      this.contactPoints.add("127.0.0.1");
-      this.contactPoints.add("127.0.0.2");
-      this.contactPoints.add("127.0.0.3");
+        // try parse the env variables provided by tlp-cluster
+        this.contactPoints = envVars.keySet().stream()
+                .filter(key -> key.startsWith("CLUSTER_CONTACT_POINT"))
+                .map(envVars::get)
+                .collect(toList());
+
+        // we did not find any, so let's default to localhost
+        if (this.contactPoints.size() == 0)
+        {
+            this.contactPoints.add("127.0.0.1");
+            this.contactPoints.add("127.0.0.2");
+            this.contactPoints.add("127.0.0.3");
+        }
+
+        this.clusterKind = envVars.getOrDefault("CLUSTER_KIND", "ccm");
+
+        if (this.clusterKind.equalsIgnoreCase("ccm"))
+        {
+            initCcmCluster();
+        }
+        else if (this.clusterKind.equalsIgnoreCase("aws"))
+        {
+            initAwsCluster();
+        }
+        else
+        {
+            throw new RuntimeException(String.format("Unknown cluster kind: %s", this.clusterKind));
+        }
     }
 
-    this.clusterKind = envVars.getOrDefault("CLUSTER_KIND", "ccm");
-
-    if (this.clusterKind.equalsIgnoreCase("ccm")) {
-      initCcmCluster();
-    } else if (this.clusterKind.equalsIgnoreCase("aws")) {
-      initAwsCluster();
-    } else {
-      throw new RuntimeException(String.format("Unknown cluster kind: %s", this.clusterKind));
+    @After
+    public void cleanUp()
+    {
+        if (cluster != null)
+        {
+            cluster.shutDown();
+        }
+        if (jmxFacade != null)
+        {
+            jmxFacade.shutdown();
+        }
     }
-  }
 
-  @After
-  public void cleanUp() {
-    if (cluster != null) {
-      cluster.shutDown();
+    private void initCcmCluster()
+    {
+        cluster = new CcmRtestCluster(this.contactPoints, NATIVE_PORT);
+        cluster.connect();
+        jmxFacade = new JmxFacade(this.contactPoints, ImmutableMap.of(
+                "127.0.0.1",
+                CCM_JMX_NODE1_PORT,
+                "127.0.0.2",
+                CCM_JMX_NODE2_PORT,
+                "127.0.0.3",
+                CCM_JMX_NODE3_PORT),
+                cluster);
     }
-    if (miniReaper != null) {
-      miniReaper.shutdown();
+
+    private void initAwsCluster()
+    {
+        cluster = new AwsRtestCluster(this.contactPoints, NATIVE_PORT);
+        cluster.connect();
+        jmxFacade = new JmxFacade(this.contactPoints, Maps.newHashMap(), cluster);
     }
-  }
 
-  private void initCcmCluster() {
-    cluster = new CcmRtestCluster(this.contactPoints, 9042);
-    miniReaper = new MiniReaper(this.contactPoints, ImmutableMap.of("127.0.0.1", 7100, "127.0.0.2", 7200, "127.0.0.3", 7300), cluster);
-  }
-
-  private void initAwsCluster() {
-    cluster = new AwsRtestCluster(this.contactPoints, 9042);
-    miniReaper = new MiniReaper(this.contactPoints, Maps.newHashMap(), cluster);
-  }
-
-  @Given("a cluster is running and reachable")
-  public void aClusterIsRunningAndReachable() {
-    assertTrue(cluster.isUp());
-    assertTrue(miniReaper.isUp());
-  }
-
-  @And("the cluster has {int} nodes")
-  public void theClusterHasNodes(int nodeCount) {
-    assertEquals(
-        "Cluster has unexpected number of nodes",
-        nodeCount, cluster.getNodeCount()
-    );
-  }
-
-  @Then("we can run shell commands on all nodes")
-  public void weCanRunShellCommandsOnAllNodes() {
-    for (String host : cluster.getContactPoints()) {
-      assertTrue(
-          String.format("Could not run shell commands on node %s", host),
-          cluster.canRunShellCommands(host)
-      );
+    @Given("a cluster is running and reachable")
+    public void aClusterIsRunningAndReachable()
+    {
+        assertTrue(cluster.isUp());
+        assertTrue(jmxFacade.isUp());
     }
-  }
 
-  @And("keyspace {string} is present")
-  public void keyspaceIsPresent(String keyspaceName) {
-    assertTrue(
-        "The keyspace is not present",
-        cluster.keyspaceIsPresent(keyspaceName)
-    );
-  }
+    @And("the cluster has {int} nodes")
+    public void theClusterHasNodes(final int nodeCount)
+    {
+        assertEquals(
+                "Cluster has unexpected number of nodes",
+                nodeCount, cluster.getNodeCount());
+    }
 
-  @And("I restore the initial state backup")
-  public void iRestoreTheInitialStateBackup() {
-    cluster.restoreInitialStateBackup();
-  }
+    @Then("we can run shell commands on all nodes")
+    public void weCanRunShellCommandsOnAllNodes()
+    {
+        for (String host : cluster.getContactPoints())
+        {
+            assertTrue(
+                    String.format("Could not run shell commands on node %s", host),
+                    cluster.canRunShellCommands(host));
+        }
+    }
 
-  @When("a repair of {string} keyspace in {string} mode with {string} validation on {string} ranges runs")
-  public void aRepairOfKeyspaceInFullModeWithValidationOnTokenRangesRuns(
-      String keyspaceName,
-      String repairMode,
-      String validationType,
-      String tokenRanges
-  ) {
-    boolean incremental = repairMode.equalsIgnoreCase("incremental");
-    boolean repairStarted = miniReaper.startRepair(keyspaceName, validationType, tokenRanges, incremental, cluster);
-    assertTrue(repairStarted);
-  }
+    @And("keyspace {string} is present")
+    public void keyspaceIsPresent(final String keyspaceName)
+    {
+        assertTrue(
+                "The keyspace is not present",
+                cluster.keyspaceIsPresent(keyspaceName));
+    }
 
-  @Then("repair finishes within a timeout of {int} minutes")
-  public void repairFinishesWithinATimeoutOfMinutes(int timeoutMinutes) {
-    boolean repairCompletedInTime = miniReaper.waitForRepair(timeoutMinutes);
-    assertTrue(repairCompletedInTime);
-  }
+    @And("I restore the initial state backup")
+    public void iRestoreTheInitialStateBackup()
+    {
+        cluster.restoreInitialStateBackup();
+    }
 
-  @And("repair must have finished successfully")
-  public void repairMustHaveFinishedSuccessfully() {
-    assertTrue(miniReaper.latestRepairWasSuccess());
-  }
+    @When("a repair of {string} keyspace in {string} mode with {string} validation on {string} ranges runs")
+    public void aRepairOfKeyspaceInFullModeWithValidationOnTokenRangesRuns(
+            final String keyspaceName,
+            final String repairMode,
+            final String validationType,
+            final String tokenRanges)
+    {
+        boolean incremental = repairMode.equalsIgnoreCase("incremental");
+        boolean repairStarted = jmxFacade.startRepair(keyspaceName, validationType, tokenRanges, incremental, cluster);
+        assertTrue(repairStarted);
+    }
 
-  @And("a {string} repair would find out-of-sync {string} ranges for keyspace {string} within {int} minutes")
-  public void thereAreOutOfSyncRangesForKeyspace(String repairMode, String tokenRanges, String keyspace, int timeoutMinutes) {
-    assertFalse(
-        "The keyspace was repaired when we expected otherwise",
-        miniReaper.rangesAreInSync(keyspace, tokenRanges, repairMode, timeoutMinutes, cluster)
-    );
-    assertTrue(
-        "The preview repair encountered an error",
-        miniReaper.latestRepairWasSuccess()
-    );
-  }
+    @Then("repair finishes within a timeout of {int} minutes")
+    public void repairFinishesWithinATimeoutOfMinutes(final int timeoutMinutes)
+    {
+        boolean repairCompletedInTime = jmxFacade.waitForRepair(timeoutMinutes);
+        assertTrue(repairCompletedInTime);
+    }
 
-  @And("a {string} repair would not find out-of-sync {string} ranges for keyspace {string} within {int} minutes")
-  public void thereAreNoOutOfSyncRangesForKeyspace(String repairMode, String rangesSelector, String keyspace, int timeoutMinutes) {
-    assertTrue(
-        "The keyspace was not repaired when we expected otherwise",
-        miniReaper.rangesAreInSync(keyspace, rangesSelector, repairMode, timeoutMinutes, cluster)
-    );
-    assertTrue(
-        "The preview repair encountered an error",
-        miniReaper.latestRepairWasSuccess()
-    );
-  }
+    @And("repair must have finished successfully")
+    public void repairMustHaveFinishedSuccessfully()
+    {
+        assertTrue(jmxFacade.latestRepairWasSuccess());
+    }
 
-  @And("all SSTables in {string} keyspace have a repairedAt value that is equal to zero")
-  public void allSSTablesInKeyspaceHaveARepairedAtValueThatIsEqualToZero(String keyspace) {
-    Map<String, Long> highestRepairedAt = miniReaper.getHighestRepairedAt(keyspace);
-    assertTrue(
-        "There were no files to check",
-        highestRepairedAt.size() > 0
-    );
-    highestRepairedAt.forEach((host, value) -> {
-      long highestRepairedAcrossKeyspace = value;
-      assertEquals(String.format(
-          "Host %s had a repairedAt value different than 0 from some SStable in keyspace %s", host, keyspace),
-          0, highestRepairedAcrossKeyspace);
-    });
-  }
+    @And("a {string} repair would find out-of-sync {string} ranges for keyspace {string} within {int} minutes")
+    public void thereAreOutOfSyncRangesForKeyspace(
+            final String repairMode,
+            final String tokenRanges,
+            final String keyspace,
+            final int timeoutMinutes)
+    {
+        assertFalse(
+                "The keyspace was repaired when we expected otherwise",
+                jmxFacade.rangesAreInSync(keyspace, tokenRanges, repairMode, timeoutMinutes, cluster));
+        assertTrue(
+                "The preview repair encountered an error",
+                jmxFacade.latestRepairWasSuccess());
+    }
 
-  @And("all SSTables in {string} keyspace have a repairedAt value that is different than zero")
-  public void allSSTablesInKeyspaceHaveARepairedAtValueThatIsDifferentThanZero(String keyspace) {
-    Map<String, Long> smallestRepairedAt = miniReaper.getSmallestRepairedAt(keyspace);
-    assertTrue(
-        "There were no files to check",
-        smallestRepairedAt.size() > 0
-    );
-    smallestRepairedAt.forEach((host, value) -> {
-      long smallestRepairedAcrossKeyspace = value;
-      assertTrue(
-          String.format("Host %s had a repairedAt value of 0 from some SStable in keyspace %s", host, keyspace),
-          smallestRepairedAcrossKeyspace != 0
-      );
-    });
-  }
+    @And("a {string} repair would not find out-of-sync {string} ranges for keyspace {string} within {int} minutes")
+    public void thereAreNoOutOfSyncRangesForKeyspace(
+            final String repairMode,
+            final String rangesSelector,
+            final String keyspace,
+            final int timeoutMinutes)
+    {
+        assertTrue(
+                "The keyspace was not repaired when we expected otherwise",
+                jmxFacade.rangesAreInSync(keyspace, rangesSelector, repairMode, timeoutMinutes, cluster));
+        assertTrue(
+                "The preview repair encountered an error",
+                jmxFacade.latestRepairWasSuccess());
+    }
 
-  @And("all SSTables in {string} keyspace have a the same repairedAt")
-  public void allSSTablesInKeyspaceHaveATheSameRepairedAt(String keyspace) {
-    Map<String, Long> smallestRepairedAts = miniReaper.getSmallestRepairedAt(keyspace);
-    Map<String, Long> highestRepairedAts = miniReaper.getHighestRepairedAt(keyspace);
+    @And("all SSTables in {string} keyspace have a repairedAt value that is equal to zero")
+    public void allSSTablesInKeyspaceHaveARepairedAtValueThatIsEqualToZero(final String keyspace)
+    {
+        Map<String, Long> highestRepairedAt = jmxFacade.getHighestRepairedAt(keyspace);
+        assertTrue(
+                "There were no files to check",
+                highestRepairedAt.size() > 0);
+        highestRepairedAt.forEach((host, value) ->
+        {
+            long highestRepairedAcrossKeyspace = value;
+            assertEquals(String.format(
+                    "Host %s had a repairedAt value different than 0 from some SStable in keyspace %s", host, keyspace),
+                    0, highestRepairedAcrossKeyspace);
+        });
+    }
 
-    assertTrue(
-        "There were no files to check",
-        smallestRepairedAts.size() > 0 && highestRepairedAts.size() > 0
-    );
+    @And("all SSTables in {string} keyspace have a repairedAt value that is different than zero")
+    public void allSSTablesInKeyspaceHaveARepairedAtValueThatIsDifferentThanZero(final String keyspace)
+    {
+        Map<String, Long> smallestRepairedAt = jmxFacade.getSmallestRepairedAt(keyspace);
+        assertTrue(
+                "There were no files to check",
+                smallestRepairedAt.size() > 0);
+        smallestRepairedAt.forEach((host, value) ->
+        {
+            long smallestRepairedAcrossKeyspace = value;
+            assertTrue(
+                    String.format("Host %s had a repairedAt value of 0 from some SStable in keyspace %s", host,
+                            keyspace),
+                    smallestRepairedAcrossKeyspace != 0);
+        });
+    }
 
-    smallestRepairedAts.forEach((host, smallestRepairedAt) -> {
-      long biggestRepairedAt = highestRepairedAts.get(host);
-      assertEquals(
-          String.format("Host %s does not have consistent repairedAt", host),
-          smallestRepairedAt.longValue(), biggestRepairedAt);
-    });
+    @And("all SSTables in {string} keyspace have a the same repairedAt")
+    public void allSSTablesInKeyspaceHaveATheSameRepairedAt(final String keyspace)
+    {
+        Map<String, Long> smallestRepairedAts = jmxFacade.getSmallestRepairedAt(keyspace);
+        Map<String, Long> highestRepairedAts = jmxFacade.getHighestRepairedAt(keyspace);
 
-    long distinctRepairedAts = Stream
-        .concat(
-            smallestRepairedAts.values().stream(),
-            highestRepairedAts.values().stream())
-        .distinct()
-        .count();
-    assertEquals(
-        "The repairedAt was inconsistent across the cluster",
-        1, distinctRepairedAts
-    );
-  }
+        assertTrue(
+                "There were no files to check",
+                smallestRepairedAts.size() > 0 && highestRepairedAts.size() > 0);
 
-  @Then("I wait for validation compactions for any table in {string} keyspace to start")
-  public void iWaitForValidationCompactionsForAnyTableInKeyspaceToStart(String keyspace) {
-    int oneMinute = 1;
-    boolean validationIsHappening = miniReaper.waitForValidation(keyspace, oneMinute);
-    assertTrue(
-        "Did not see validation happening",
-        validationIsHappening
-    );
-  }
+        smallestRepairedAts.forEach((host, smallestRepairedAt) ->
+        {
+            long biggestRepairedAt = highestRepairedAts.get(host);
+            assertEquals(
+                    String.format("Host %s does not have consistent repairedAt", host),
+                    smallestRepairedAt.longValue(), biggestRepairedAt);
+        });
 
-  @When("I force terminate the repair")
-  public void iForceTerminateTheRepair() {
-    miniReaper.terminateRepairEverywhere();
-  }
+        long distinctRepairedAts = Stream
+                .concat(
+                        smallestRepairedAts.values().stream(),
+                        highestRepairedAts.values().stream())
+                .distinct()
+                .count();
+        assertEquals(
+                "The repairedAt was inconsistent across the cluster",
+                1, distinctRepairedAts);
+    }
 
-  @Then("I can verify that repair threads get cleaned up within {int} minutes")
-  public void iCanVerifyThatRepairThreadsGetCleanedUpWithinMinutes(int timeoutMinutes) {
-    assertTrue(
-        "Validation threads did not disappear in time",
-        miniReaper.waitForRepairThreadsToDisappear(timeoutMinutes)
-    );
-  }
+    @Then("I wait for validation compactions for any table in {string} keyspace to start")
+    public void iWaitForValidationCompactionsForAnyTableInKeyspaceToStart(final String keyspace)
+    {
+        int oneMinute = 1;
+        boolean validationIsHappening = jmxFacade.waitForValidation(keyspace, oneMinute);
+        assertTrue(
+                "Did not see validation happening",
+                validationIsHappening);
+    }
 
-  @And("within {int} minutes I cannot find any data in {string} keyspace showing a pending repair")
-  public void withinMinutesICannotFindAnyNonSystemDataShowingAPendingRepair(int timeoutMinutes, String keyspace) {
-    cluster.getTableNamesIn(keyspace).forEach(table -> {
-      boolean tableHasDataPending = miniReaper.waitForNoTableHavingDataPendingRepair(keyspace, table, timeoutMinutes);
-      assertTrue(
-          String.format("%s.%s still had data pending repair after the timeout", keyspace, table),
-          tableHasDataPending
-      );
-    });
-  }
+    @When("I force terminate the repair")
+    public void iForceTerminateTheRepair()
+    {
+        jmxFacade.terminateRepairEverywhere();
+    }
 
-  @When("I perform a major compaction on all nodes for the {string} keyspace")
-  public void iPerformAMajorCompactionOnAllNodesForTheKeyspace(String keyspace) {
-    assertTrue(
-        "There was an error triggering major compactions",
-        miniReaper.triggerMajorCompaction(keyspace));
-  }
+    @Then("I can verify that repair threads get cleaned up within {int} minutes")
+    public void iCanVerifyThatRepairThreadsGetCleanedUpWithinMinutes(final int timeoutMinutes)
+    {
+        assertTrue(
+                "Validation threads did not disappear in time",
+                jmxFacade.waitForRepairThreadsToDisappear(timeoutMinutes));
+    }
 
-  @Then("I wait for compactions on all nodes for any table in {string} keyspace to finish")
-  public void iWaitForCompactionsOnAllNodesForAnyTableInKeyspaceToFinish(String keyspace) {
-    int timeout = 30;
-    boolean compactionIsNotHappening = miniReaper.waitForNoCompaction(keyspace, timeout);
-    assertTrue(
-        "Compaction did not finish in time",
-        compactionIsNotHappening
-    );
-  }
+    @And("within {int} minutes I cannot find any data in {string} keyspace showing a pending repair")
+    public void withinMinutesICannotFindAnyNonSystemDataShowingAPendingRepair(final int timeoutMinutes,
+            final String keyspace)
+    {
+        cluster.getTableNamesIn(keyspace).forEach(table ->
+        {
+            boolean tableHasDataPending = jmxFacade.waitForNoTableHavingDataPendingRepair(keyspace, table,
+                    timeoutMinutes);
+            assertTrue(
+                    String.format("%s.%s still had data pending repair after the timeout", keyspace, table),
+                    tableHasDataPending);
+        });
+    }
 
-  @And("{int} repair session was used to process all ranges")
-  public void repairSessionWasUsedToProcessAllRanges(int expectedRepairSessionCount) {
-    assertEquals(
-        "The repair used more than one repair session",
-        expectedRepairSessionCount, miniReaper.countRepairSessionsInRecentRepair()
-    );
-  }
+    @When("I perform a major compaction on all nodes for the {string} keyspace")
+    public void iPerformAMajorCompactionOnAllNodesForTheKeyspace(final String keyspace)
+    {
+        assertTrue(
+                "There was an error triggering major compactions",
+                jmxFacade.triggerMajorCompaction(keyspace));
+    }
 
-  @And("there would be exactly {int} endpoints mentioned during the repair preview")
-  public void thereWouldBeExactlyEndpointsMentionedDuringTheRepairPreview(int expectedEndpointsCount) {
-    assertEquals(
-        "Wrong number of endpoints was involved in the repair (preview)",
-        expectedEndpointsCount, miniReaper.countEndpointsInPreview()
-    );
-  }
+    @Then("I wait for compactions on all nodes for any table in {string} keyspace to finish")
+    public void iWaitForCompactionsOnAllNodesForAnyTableInKeyspaceToFinish(final String keyspace)
+    {
+        boolean compactionIsNotHappening = jmxFacade.waitForNoCompaction(keyspace, COMPACTION_TIMEOUT_IN_MINS);
+        assertTrue(
+                "Compaction did not finish in time",
+                compactionIsNotHappening);
+    }
 
-  @When("we restore a backup called {string}")
-  public void weRestoreABackupCalled(String backupName) throws InterruptedException {
-    assertTrue(
-      "Restoring backup failed",
-      cluster.restoreBackup(backupName)
-    );
-    miniReaper.reconnect(5);
-  }
+    @And("{int} repair session was used to process all ranges")
+    public void repairSessionWasUsedToProcessAllRanges(final int expectedRepairSessionCount)
+    {
+        assertEquals(
+                "The repair used more than one repair session",
+                expectedRepairSessionCount, jmxFacade.countRepairSessionsInRecentRepair());
+    }
+
+    @And("there would be exactly {int} endpoints mentioned during the repair preview")
+    public void thereWouldBeExactlyEndpointsMentionedDuringTheRepairPreview(final int expectedEndpointsCount)
+    {
+        assertEquals(
+                "Wrong number of endpoints was involved in the repair (preview)",
+                expectedEndpointsCount, jmxFacade.countEndpointsInPreview());
+    }
+
+    @When("we restore a backup called {string}")
+    public void weRestoreABackupCalled(final String backupName) throws InterruptedException
+    {
+        assertTrue(
+                "Restoring backup failed",
+                cluster.restoreBackup(backupName));
+        jmxFacade.reconnect(JMX_RECONNECTION_ATTEMPTS);
+    }
 }

@@ -40,7 +40,7 @@ Feature: Incremental Repair
     When a repair of "repair_quality" keyspace in "incremental" mode with "<parallelism>" validation on "<tokens>" ranges runs
     Then I wait for validation compactions for any table in "repair_quality" keyspace to start
     When I force terminate the repair
-    Then I can verify that repair threads get cleaned up within 5 minutes
+    Then I can verify that repair threads get cleaned up within 15 minutes
     And all SSTables in "repair_quality" keyspace have a repairedAt value that is equal to zero
 
     Examples:

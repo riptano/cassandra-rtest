@@ -18,7 +18,62 @@
 #
 version: 2.1
 jobs:
-  repair-tests:
+  build:
+    docker:
+      - image: circleci/openjdk:8-jdk-node-browsers
+    environment:
+      LOCAL_JMX: "no"
+    steps:
+      - checkout
+      - run:
+          name: Install System Dependencies
+          command: |
+              set -x
+              sudo apt-get update -qq
+              sudo apt-get install -y libjna-java python-dev python-pip libyaml-dev
+              sudo pip install pyYaml ccm
+
+      - run:
+          name: Build
+          command: |
+              mvn package -DskipTests
+
+  ccm-repair-tests:
+    docker:
+      - image: circleci/openjdk:8-jdk-node-browsers
+    parameters:
+      repair-type:
+        type: string
+    environment:
+      REPAIR_TYPE: << parameters.repair-type >>
+      LOCAL_JMX: "no"
+    steps:
+      - checkout
+      - run:
+          name: Install System Dependencies
+          command: |
+              set -x
+              sudo apt-get update -qq
+              sudo apt-get install -y libjna-java python-dev python-pip libyaml-dev
+              sudo pip install pyYaml ccm
+
+      - restore_cache:
+            keys:
+            - v1-dependencies-{{ checksum "pom.xml" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
+      - run:
+          name: Run CCM based tests
+          command: |
+              mvn test -Dcucumber.filter.tags="@${REPAIR_TYPE}"
+
+      - save_cache:
+          paths:
+            - ~/.m2
+          key: v1-dependencies-{{ checksum "pom.xml" }}
+
+  cass-repair-tests:
     parameters:
        repair-type:
          type: string
@@ -177,7 +232,16 @@ workflows:
   version: 2.1
   repair_qa_push:
     jobs:
-      - repair-tests:
+      - build
+      - ccm-repair-tests:
+          requires:
+            - build
+          matrix:
+            parameters:
+              repair-type: ["Full", "Subrange", "Incremental"]
+      - cass-repair-tests:
+          requires:
+            - ccm-repair-tests
           matrix:
             parameters:
               repair-type: ["Full", "Subrange", "Incremental"]
@@ -190,7 +254,10 @@ workflows:
               only:
                 - trunk
     jobs:
-      - repair-tests:
+      - build
+      - cass-repair-tests:
+          requires:
+            - build
           matrix:
             parameters:
               repair-type: ["Full", "Subrange", "Incremental"]

@@ -74,3 +74,8 @@
 -XX:GCLogFileSize=10M
 
 # The newline in the end of file is intentional
+-Dcassandra.max_local_pause_in_ms=15000
+-Dcassandra.available_processors=2
+-Xms200M
+-Xmx200M
+-Xmn112M

@@ -12,7 +12,7 @@ batch_size_warn_threshold_in_kb: 5
 batchlog_replay_throttle_in_kb: 1024
 cas_contention_timeout_in_ms: 1000
 cdc_enabled: false
-cdc_raw_directory: /Users/adejanovski/.ccm/repair_qa/node1/cdc_raw
+cdc_raw_directory: ~/.ccm/repair_qa/node1/cdc_raw
 client_encryption_options:
   enabled: false
   keystore: conf/.keystore
@@ -22,7 +22,7 @@ cluster_name: repair_qa
 column_index_cache_size_in_kb: 2
 column_index_size_in_kb: 64
 commit_failure_policy: stop
-commitlog_directory: /Users/adejanovski/.ccm/repair_qa/node1/commitlogs
+commitlog_directory: ~/.ccm/repair_qa/node1/commitlogs
 commitlog_segment_size_in_mb: 32
 commitlog_sync: periodic
 commitlog_sync_period_in_ms: 10000
@@ -38,7 +38,7 @@ counter_cache_size_in_mb: null
 counter_write_request_timeout_in_ms: 5000
 credentials_validity_in_ms: 2000
 data_file_directories:
-- /Users/adejanovski/.ccm/repair_qa/node1/data0
+- ~/.ccm/repair_qa/node1/data0
 diagnostic_events_enabled: false
 disk_failure_policy: stop
 dynamic_snitch_badness_threshold: 1.0
@@ -52,7 +52,7 @@ enable_user_defined_functions: false
 endpoint_snitch: SimpleSnitch
 hinted_handoff_enabled: true
 hinted_handoff_throttle_in_kb: 1024
-hints_directory: /Users/adejanovski/.ccm/repair_qa/node1/hints
+hints_directory: ~/.ccm/repair_qa/node1/hints
 hints_flush_period_in_ms: 10000
 incremental_backups: false
 index_summary_capacity_in_mb: null
@@ -89,7 +89,7 @@ row_cache_save_period: 0
 row_cache_size_in_mb: 0
 rpc_address: 127.0.0.1
 rpc_keepalive: true
-saved_caches_directory: /Users/adejanovski/.ccm/repair_qa/node1/saved_caches
+saved_caches_directory: ~/.ccm/repair_qa/node1/saved_caches
 seed_provider:
 - class_name: org.apache.cassandra.locator.SimpleSeedProvider
   parameters:
