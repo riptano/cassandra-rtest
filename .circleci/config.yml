@@ -111,7 +111,11 @@ jobs:
           name: Build Cassandra Trunk
           command: |
             echo "Building trunk..."
-            git clone https://github.com/apache/cassandra.git
+            # test the CASSANDRA-16406 repair performance patch
+            git clone https://github.com/adejanovski/cassandra.git
+            cd cassandra
+            git checkout CASSANDRA-16406
+            cd ..
             tlp-cluster build -n latest_trunk ./cassandra
             ls -lrt ~/.tlp-cluster/builds/latest_trunk
             ls -lrt ~/.tlp-cluster/builds/latest_trunk/conf
