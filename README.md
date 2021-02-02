@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/riptano/cassandra-rtest.svg?style=shield)](https://circleci.com/gh/riptano/cassandra-rtest/tree/trunk)
+
 # cassandra-rtest
 Integration tests for Repairs
 
