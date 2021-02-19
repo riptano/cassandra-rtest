@@ -47,6 +47,7 @@ jobs:
     environment:
       REPAIR_TYPE: << parameters.repair-type >>
       LOCAL_JMX: "no"
+      MEDUSA_BRANCH: "master"
     steps:
       - checkout
       - run:
@@ -156,7 +157,10 @@ jobs:
             mkdir -p ~/.aws
             echo "$(echo ${AWS_CREDENTIALS} | base64 --decode)" >> ~/.aws/credentials
             chmod 600 ~/.aws/credentials
-            install_medusa.sh -b cassandra-repair-qa -c ~/.aws/credentials -s s3_us_west_oregon --prefix=cassandra-qa --branch=alex/unthrottle_restores > install_medusa.log
+            install_medusa.sh -b cassandra-repair-qa -c ~/.aws/credentials -s s3_us_west_oregon --prefix=cassandra-qa --branch=master > install_medusa.log
+            shopt -s expand_aliases || setopt aliases
+            source env.sh
+            x_all "sudo apt-get install awscli -y"
 
       - run: 
           name: Prepare the test environment
@@ -209,9 +213,12 @@ jobs:
               ssh cassandra$i "tar czf /home/ubuntu/cassandra${i}_logs.tar.gz /var/log/cassandra/*"
               scp cassandra$i:/home/ubuntu/cassandra${i}_logs.tar.gz ~/target/test-results/artifacts/
               scp cassandra$i:/home/ubuntu/medusa_restore.log ~/target/test-results/artifacts/cassandra${i}_medusa_restore.log || true
+              ssh cassandra$i "cd /var/lib/cassandra && sudo tar czf medusa_restore_logs.tar.gz medusa-job-*"
+              scp cassandra$i:/var/lib/cassandra/medusa_restore_logs.tar.gz ~/target/test-results/artifacts/cassandra${i}_medusa_restore_full_logs.tar.gz || true
             done
             scp monitoring0:/home/ubuntu/target/surefire-reports/junit.xml ~/target/test-results || true
             scp monitoring0:/home/ubuntu/target/surefire-reports/cucumber-report.html ~/target/test-results/artifacts || true
+            cp medusa.log ~/target/test-results/artifacts/medusa_install.log
             
 
       - store_test_results:
@@ -248,7 +255,7 @@ workflows:
   repair_qa_nightly:
     triggers:
       - schedule:
-          cron: "0 0 * * *"
+          cron: "0 1 * * *"
           filters:
             branches:
               only:
