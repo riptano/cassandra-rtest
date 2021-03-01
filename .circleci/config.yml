@@ -19,8 +19,9 @@
 version: 2.1
 jobs:
   build:
-    docker:
-      - image: circleci/openjdk:8-jdk-node-browsers
+    machine:
+      image: ubuntu-2004:202101-01
+    resource_class: medium
     environment:
       LOCAL_JMX: "no"
     steps:
@@ -30,8 +31,8 @@ jobs:
           command: |
               set -x
               sudo apt-get update -qq
-              sudo apt-get install -y libjna-java python-dev python-pip libyaml-dev
-              sudo pip install pyYaml ccm
+              sudo apt-get install -y libjna-java python3-dev python3-pip libyaml-dev
+              sudo pip3 install pyYaml ccm
 
       - run:
           name: Build
@@ -39,8 +40,9 @@ jobs:
               mvn package -DskipTests
 
   ccm-repair-tests:
-    docker:
-      - image: circleci/openjdk:8-jdk-node-browsers
+    machine:
+      image: ubuntu-2004:202101-01
+    resource_class: medium
     parameters:
       repair-type:
         type: string
@@ -55,8 +57,8 @@ jobs:
           command: |
               set -x
               sudo apt-get update -qq
-              sudo apt-get install -y libjna-java python-dev python-pip libyaml-dev
-              sudo pip install pyYaml ccm
+              sudo apt-get install -y libjna-java python3-dev python3-pip libyaml-dev
+              sudo pip3 install pyYaml ccm
 
       - restore_cache:
             keys:
@@ -98,7 +100,7 @@ jobs:
             # No clue why we need to pull these manually now...
             docker pull hashicorp/terraform:0.11.14
             docker pull thelastpickle/pssh:1.0
-            docker pull thelastpickle/cassandra-build:1.0
+            docker pull thelastpickle/cassandra-build:1.1
             curl -sL https://github.com/shyiko/jabba/raw/master/install.sh | bash && . ~/.jabba/jabba.sh
             . ~/.jabba/jabba.sh && jabba install adopt@1.8.0-272
             . ~/.jabba/jabba.sh && jabba alias default adopt@1.8.0-272
@@ -111,12 +113,25 @@ jobs:
       - run: 
           name: Build Cassandra Trunk
           command: |
-            echo "Building trunk..."
-            git clone https://github.com/apache/cassandra.git
-            tlp-cluster build -n latest_trunk ./cassandra
-            ls -lrt ~/.tlp-cluster/builds/latest_trunk
-            ls -lrt ~/.tlp-cluster/builds/latest_trunk/conf
-            ls -lrt ~/.tlp-cluster/builds/latest_trunk/deb
+            echo "Building deb package from trunk..."
+            mkdir cass-build
+            chmod 777 cass-build
+            git clone https://github.com/apache/cassandra-builds.git
+            cd cassandra-builds
+            docker build -t cass-build-debs -f docker/buster-image.docker docker/
+            docker run --rm -v `pwd`/../cass-build:/dist `docker images -f label=org.cassandra.buildenv=buster -q` /home/build/build-debs.sh trunk 8
+            
+            # Make the build available to tlp-cluster
+            echo "Package build for tlp-cluster"
+            cd ../cass-build
+            mkdir -p ~/.tlp-cluster/builds/latest_trunk/deb
+            mkdir -p ~/.tlp-cluster/builds/latest_trunk/conf
+            mkdir ./out
+            deb=$(ls cassandra_*_all.deb)
+            dpkg-deb -X $deb ./out
+            set -e
+            cp -r ./out/etc/cassandra/* ~/.tlp-cluster/builds/latest_trunk/conf/
+            cp *.deb ~/.tlp-cluster/builds/latest_trunk/deb/
 
       - run:
           name: Configure tlp-cluster
@@ -207,7 +222,9 @@ jobs:
           command: |
             shopt -s expand_aliases || setopt aliases
             set +e 
-            source env.sh            
+            source env.sh
+            cp *.log ~/target/test-results/artifacts/
+            cp logs/debug.log ~/target/test-results/artifacts/tlp-cluster-debug.log
             for i in {0..2}
             do
               ssh cassandra$i "tar czf /home/ubuntu/cassandra${i}_logs.tar.gz /var/log/cassandra/*"
@@ -218,7 +235,6 @@ jobs:
             done
             scp monitoring0:/home/ubuntu/target/surefire-reports/junit.xml ~/target/test-results || true
             scp monitoring0:/home/ubuntu/target/surefire-reports/cucumber-report.html ~/target/test-results/artifacts || true
-            cp medusa.log ~/target/test-results/artifacts/medusa_install.log
             
 
       - store_test_results:
