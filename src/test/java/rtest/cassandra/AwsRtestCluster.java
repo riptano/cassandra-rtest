@@ -120,43 +120,50 @@ public final class AwsRtestCluster extends RtestCluster
                 "medusa -v restore-cluster --backup-name %s --bypass-checks --temp-dir %s >> medusa_restore.log 2>&1",
                 backupName, tempDir);
         shutDown();
-        CommandResult commandResult = runCommand(alwaysTheSameHost, cmd);
-        if (commandResult.getExitStatus() != 0)
+        // Attempting the restore twice as S3 can be unreliable sometimes
+        for (int i = 0; i < 2; i++)
         {
-            LOG.error("Command exited with code: {}", commandResult.getExitStatus());
-            // Restore failed or didn't complete before timeout. Writing logs in the output for diagnosis purposes.
-            displayMedusaLogs(backupName, alwaysTheSameHost, tempDir);
-            return false;
-        }
-        else
-        {
-            Instant startTime = Instant.now();
-            // re-connect the cql session after the restore
-            while (startTime.plus(TIMEOUT_NODES_UP_AFTER_RESTORE_IN_MINS, ChronoUnit.MINUTES)
-                    .compareTo(Instant.now()) > 0)
+            CommandResult commandResult = runCommand(alwaysTheSameHost, cmd);
+            if (commandResult.getExitStatus() == 0)
             {
-                try
+                // Restore was successful
+                break;
+            }
+            else if (i > 0)
+            {
+                LOG.error("Command exited with code: {}", commandResult.getExitStatus());
+                // Restore failed or didn't complete before timeout. Writing logs in the output for diagnosis purposes.
+                displayMedusaLogs(backupName, alwaysTheSameHost, tempDir);
+                return false;
+            }
+        }
+
+        Instant startTime = Instant.now();
+        // re-connect the cql session after the restore
+        while (startTime.plus(TIMEOUT_NODES_UP_AFTER_RESTORE_IN_MINS, ChronoUnit.MINUTES)
+                .compareTo(Instant.now()) > 0)
+        {
+            try
+            {
+                reConnect(2);
+                if (this.getCluster().getMetadata().getAllHosts().stream().filter(host -> !host.isUp())
+                        .count() == 0)
                 {
-                    reConnect(2);
-                    if (this.getCluster().getMetadata().getAllHosts().stream().filter(host -> !host.isUp())
-                            .count() == 0)
-                    {
-                        return true;
-                    }
-                    else
-                    {
-                        throw new RuntimeException("Some hosts are still down.");
-                    }
+                    return true;
                 }
-                catch (RuntimeException e)
+                else
                 {
-                    LOG.error("Cluster restore is still running...");
-                    Thread.sleep(SLEEP_STEP_IN_MILLIS);
+                    throw new RuntimeException("Some hosts are still down.");
                 }
             }
-            displayMedusaLogs(backupName, alwaysTheSameHost, tempDir);
-            return false;
+            catch (RuntimeException e)
+            {
+                LOG.error("Cluster restore is still running...");
+                Thread.sleep(SLEEP_STEP_IN_MILLIS);
+            }
         }
+        displayMedusaLogs(backupName, alwaysTheSameHost, tempDir);
+        return false;
     }
 
     private void displayMedusaLogs(final String backupName, final String alwaysTheSameHost, final String tempDir)
