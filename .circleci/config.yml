@@ -75,6 +75,7 @@ jobs:
 
       - run:
           name: Run CCM based tests
+          no_output_timeout: 30m
           command: |
               mvn test -Dcucumber.filter.tags="@${REPAIR_TYPE}"
 
