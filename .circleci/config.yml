@@ -75,7 +75,6 @@ jobs:
 
       - run:
           name: Run CCM based tests
-          no_output_timeout: 30m
           command: |
               mvn test -Dcucumber.filter.tags="@${REPAIR_TYPE}"
 
@@ -180,7 +179,7 @@ jobs:
             mkdir -p ~/.aws
             echo "$(echo ${AWS_CREDENTIALS} | base64 --decode)" >> ~/.aws/credentials
             chmod 600 ~/.aws/credentials
-            install_medusa.sh -b cassandra-repair-qa -c ~/.aws/credentials -s s3_us_west_oregon --prefix=cassandra-qa > install_medusa.log
+            install_medusa.sh -b cassandra-repair-qa -c ~/.aws/credentials -s s3_us_west_oregon --branch=0.9 --prefix=cassandra-qa > install_medusa.log
             shopt -s expand_aliases || setopt aliases
             source env.sh
             x_all "sudo apt-get install awscli -y"
