@@ -137,7 +137,7 @@ public final class CcmRtestCluster extends RtestCluster
                     "/bin/bash", "-c", cmd
             });
             process.waitFor();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
             List<String> output = Lists.newArrayList();
             String line;
             while ((line = reader.readLine()) != null)

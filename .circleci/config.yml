@@ -264,15 +264,17 @@ workflows:
   repair_qa_push:
     jobs:
       - build
-      - ccm-repair-tests:
-          requires:
-            - build
-          matrix:
-            parameters:
-              repair-type: ["Full", "Subrange", "Incremental"]
+      # CCM test are currently unstable in CircleCI and need to be worked on
+      #- ccm-repair-tests:
+      #    requires:
+      #      - build
+      #    matrix:
+      #      parameters:
+      #        repair-type: ["Full", "Subrange", "Incremental"]
       - cass-repair-tests:
           requires:
-            - ccm-repair-tests
+      #      - ccm-repair-tests
+            - build
           matrix:
             parameters:
               repair-type: ["Full", "Subrange", "Incremental"]
