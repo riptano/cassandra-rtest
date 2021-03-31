@@ -62,14 +62,8 @@ public final class CcmRtestCluster extends RtestCluster
     {
         final int numberOfCcmNodes = 3;
         runCmd("ccm stop", true);
-        try
-        {
-            runCmd(String.format("ccm switch %s", clusterName));
-        }
-        catch (RuntimeException e)
-        {
-            runCmd(String.format("ccm create %s -v github:apache/trunk -n 3", clusterName));
-        }
+        runCmd(String.format("ccm remove %s", clusterName), true);
+        runCmd(String.format("ccm create %s -v github:apache/trunk -n 3", clusterName));
 
         URL res = getClass().getClassLoader().getResource("ccm");
         File file;
@@ -143,7 +137,7 @@ public final class CcmRtestCluster extends RtestCluster
                     "/bin/bash", "-c", cmd
             });
             process.waitFor();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()));
             List<String> output = Lists.newArrayList();
             String line;
             while ((line = reader.readLine()) != null)
